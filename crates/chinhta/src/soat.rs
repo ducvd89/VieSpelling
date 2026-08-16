@@ -92,11 +92,23 @@ pub struct BoSoat {
     pub tuy_chon: TuyChon,
     bang_de_nham: de_nham::Bang,
     kieu: Kieu,
+    ten_rieng: std::collections::HashSet<String>,
 }
 
 impl BoSoat {
     pub fn moi(tuy_chon: TuyChon, kieu: Kieu) -> BoSoat {
-        BoSoat { tuy_chon, bang_de_nham: de_nham::Bang::nap(), kieu }
+        BoSoat {
+            tuy_chon,
+            bang_de_nham: de_nham::Bang::nap(),
+            kieu,
+            ten_rieng: Default::default(),
+        }
+    }
+
+    /// Danh sách tên riêng đếm được từ chính cuốn sách — xem [`gom_ten_rieng`].
+    pub fn voi_ten_rieng(mut self, ten: std::collections::HashSet<String>) -> BoSoat {
+        self.ten_rieng = ten;
+        self
     }
 
     /// Chạy mọi tầng không cần ngữ cảnh trên một đoạn.
@@ -190,6 +202,12 @@ impl BoSoat {
             if !dang_kiem || tu_dien::co_am_tiet(t.chu) || am_tiet::hop_le(t.chu) {
                 continue;
             }
+            // Tên riêng đếm được từ chính cuốn sách. `Kông` trong `Hồng Kông`
+            // không có trong từ điển và phạm luật chính tả (`k` không đứng
+            // trước `ô`), nhưng nó là tên phiên âm chứ không phải lỗi.
+            if self.ten_rieng.contains(&t.chu.to_lowercase()) {
+                continue;
+            }
             let truoc = i.checked_sub(1).map(|k| tu[k].chu);
             let sau = tu.get(i + 1).map(|x| x.chu);
 
@@ -214,10 +232,14 @@ impl BoSoat {
                     ly_do: format!("`{}` là hai tiếng dính liền — `{}`", t.chu, ung_vien[0]),
                     ung_vien,
                     loai: Loai::DinhChu,
-                    // Dứt khoát khi **chỉ có một** cách chia. Nhiều cách chia
-                    // thì phải cân nhắc thật, vì chọn sai chỗ ngắt là đổi hẳn
-                    // nghĩa câu.
-                    chac_nho_tu_ghep: tach_duoc.len() == 1,
+                    // Dứt khoát trong hai ca: chỉ có **một** cách chia, hoặc
+                    // cách chia đầu bảng dựng lại nguyên một **từ ghép có
+                    // thật** — `erằng` ra `e rằng`, vốn là một mục trong từ
+                    // điển. Ca sau là bằng chứng mạnh nhất mà bộ dò có được:
+                    // không chữ nào sai, và cái ghép lại được có sẵn trong từ
+                    // điển.
+                    chac_nho_tu_ghep: tach_duoc.len() == 1
+                        || tu_dien::co_tu_ghep(&tach_duoc[0].to_lowercase()),
                 });
                 continue;
             }
@@ -451,6 +473,66 @@ fn xep_hang_ung_vien(
     (ghep.into_iter().map(|(_, u)| u.chu).collect(), dut_khoat)
 }
 
+/// Số lần một chữ phải xuất hiện thì mới được coi là tên riêng.
+///
+/// Ba là chỗ đo được: lỗi gõ lặp lại y hệt ba lần trong một cuốn sách là hiếm,
+/// còn tên riêng thì gặp hàng chục lần.
+const LAN_DE_LA_TEN_RIENG: usize = 3;
+
+/// Gom tên riêng từ chính cuốn sách: chữ **viết hoa**, **không có trong từ
+/// điển**, và **lặp lại nhiều lần**.
+///
+/// Gọi cho mọi đoạn ở lượt đọc đầu, rồi đưa kết quả vào [`BoSoat::voi_ten_rieng`].
+///
+/// Vì sao phải đếm cả sách thay vì nhìn một chữ: `Kông` trong `Hồng Kông` và
+/// `Kó` (gõ nhầm `Có`) trông giống hệt nhau nếu chỉ nhìn một chữ — cùng viết
+/// hoa, cùng không có trong từ điển, cùng phạm luật `k` không đứng trước
+/// nguyên âm sau. Chỉ có số lần xuất hiện phân được: tên riêng lặp lại, lỗi gõ
+/// thì không.
+///
+/// Đòi **viết hoa** là điều kiện then chốt. Không có nó thì `khôgn` — gõ nhầm
+/// `không`, lặp 153 lần trong một cuốn — cũng thành "tên riêng" và thoát hết.
+pub fn gom_ten_rieng(van_ban: &str, dem: &mut std::collections::HashMap<String, usize>) {
+    let tu = tach_tu::cat(van_ban);
+    for (i, t) in tu.iter().enumerate() {
+        if tach_tu::dang_tu(t.chu) != DangTu::TiengViet {
+            continue;
+        }
+        if !t.chu.chars().next().is_some_and(|c| c.is_uppercase()) {
+            continue;
+        }
+        if tu_dien::co_am_tiet(t.chu) {
+            continue;
+        }
+        // **Chữ hoa phải nằm giữa câu**, không phải đầu câu. Đầu câu thì chữ
+        // nào cũng viết hoa nên chữ hoa chẳng nói lên điều gì — mà lỗi gõ hay
+        // rơi vào đầu câu đúng như mọi chỗ khác. Không có luật này thì `Chẵng`
+        // (gõ nhầm `Chẳng`, lặp mấy chục lần) được xếp là tên riêng rồi thoát.
+        //
+        // Giữa câu thì tiếng Việt chỉ viết hoa cho tên riêng, nên tín hiệu rất
+        // mạnh — đủ mạnh để giữ `Kông` trong `Hồng Kông`.
+        if i == 0 || !giua_cau(van_ban, tu[i - 1].cuoi, t.dau) {
+            continue;
+        }
+        *dem.entry(t.chu.to_lowercase()).or_insert(0) += 1;
+    }
+}
+
+/// Khoảng giữa hai chữ có phải chỉ là khoảng trắng thường không.
+///
+/// Có dấu kết câu, dấu ngoặc kép hay xuống dòng xen vào thì chữ sau là **đầu
+/// câu**, và việc nó viết hoa không nói lên điều gì.
+fn giua_cau(van_ban: &str, tu_vi_tri: usize, den: usize) -> bool {
+    van_ban[tu_vi_tri..den].chars().all(|c| c == ' ' || c == ',' || c == ';')
+}
+
+/// Chốt danh sách tên riêng từ bảng đếm.
+pub fn chot_ten_rieng(
+    dem: std::collections::HashMap<String, usize>,
+) -> std::collections::HashSet<String> {
+    dem.into_iter().filter(|(_, n)| *n >= LAN_DE_LA_TEN_RIENG).map(|(t, _)| t).collect()
+}
+
 /// Chèn khoảng trắng vào **chính chuỗi gốc**, theo cách chia đã tìm được.
 ///
 /// [`tu_dien::tach_dinh`] làm việc trên bản viết thường nên kết quả của nó mất
@@ -641,6 +723,55 @@ mod kiem {
         let mut kq = bo().soat("Tình thuơng của mẹ");
         bo().quyet_khong_mo_hinh(&mut kq);
         assert_eq!(kq.chu, "Tình thương của mẹ");
+    }
+
+    #[test]
+    fn ten_rieng_lap_lai_thi_duoc_giu_nguyen() {
+        // `Kông` không có trong từ điển và phạm luật chính tả (`k` không đứng
+        // trước `ô`), nhưng trong `Hồng Kông` nó là tên phiên âm chứ không phải
+        // lỗi. Phân được nhờ đếm cả sách: tên riêng lặp lại, lỗi gõ thì không.
+        let mut dem = std::collections::HashMap::new();
+        for cau in [
+            "Tôi đến Hồng Kông chơi.",
+            "Ở Hồng Kông có nhiều người.",
+            "Chuyến bay tới Hồng Kông bị hoãn.",
+        ] {
+            gom_ten_rieng(cau, &mut dem);
+        }
+        let ten = chot_ten_rieng(dem);
+        assert!(ten.contains("kông"), "{ten:?}");
+
+        let bo = BoSoat::moi(TuyChon::default(), Kieu::Cu).voi_ten_rieng(ten);
+        let v = "Tôi đến Hồng Kông chơi.";
+        let mut kq = bo.soat(v);
+        bo.quyet_khong_mo_hinh(&mut kq);
+        assert_eq!(kq.chu, v);
+    }
+
+    #[test]
+    fn chu_hoa_dau_cau_khong_phai_ten_rieng() {
+        // `Chẵng` là gõ nhầm `Chẳng`, và nó đứng đầu câu nên chữ hoa chẳng nói
+        // lên điều gì. Không có luật này thì mọi lỗi gõ hay rơi vào đầu câu đều
+        // được xếp là tên riêng rồi thoát hết.
+        let mut dem = std::collections::HashMap::new();
+        for _ in 0..5 {
+            gom_ten_rieng("Chẵng ai biết. Chẵng ai hay.", &mut dem);
+        }
+        assert!(chot_ten_rieng(dem).is_empty());
+    }
+
+    #[test]
+    fn d_va_d_gach_deu_la_tu_that_nen_khong_ai_dung_vao() {
+        // `dang` (dang tay, dở dang) và `đang` (đang làm) là hai từ khác nhau,
+        // cả hai đều có trong từ điển. Bộ dò chỉ xét chữ **không có** trong từ
+        // điển, nên không chữ nào trong hai chữ này từng bị đem ra cân nhắc —
+        // dù phép sinh ứng viên có biết đường `dang` → `đang` đi nữa.
+        for v in ["Tay dang rộng, việc còn dở dang.", "Anh đang làm gì đấy?"] {
+            let mut kq = bo().soat(v);
+            bo().quyet_khong_mo_hinh(&mut kq);
+            assert_eq!(kq.chu, v);
+            assert!(kq.cho_xet.is_empty(), "{:?}", kq.cho_xet);
+        }
     }
 
     #[test]

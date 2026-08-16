@@ -30,13 +30,20 @@ pub struct UngVien {
 
 /// Các nguyên âm cùng một chữ cái nền — đây là nhóm mà người gõ hay lẫn, vì
 /// trên bàn phím Telex chúng chỉ khác nhau một phím phụ.
+///
+/// **`đ` không đối xứng với `d`.** Thiếu dấu là chuyện thường — gõ `dang` khi
+/// định gõ `đang` chỉ là quên một phím. Chiều ngược lại thì không: muốn ra `đ`
+/// phải gõ hẳn `dd`, nên không ai vô tình gõ `đ` khi định gõ `d`. Xếp hai chiều
+/// như nhau thì bộ sửa đề nghị đổi `đ` thành `d` — mà đó là hai phụ âm khác
+/// nhau, đổi là hỏng nghĩa.
 fn cung_nen(c: char) -> &'static [char] {
     match c {
         'a' | 'ă' | 'â' => &['a', 'ă', 'â'],
         'e' | 'ê' => &['e', 'ê'],
         'o' | 'ô' | 'ơ' => &['o', 'ô', 'ơ'],
         'u' | 'ư' => &['u', 'ư'],
-        'd' | 'đ' => &['d', 'đ'],
+        'd' => &['d', 'đ'],
+        'đ' => &['đ'],
         _ => &[],
     }
 }
@@ -55,9 +62,19 @@ pub fn sinh(tieng: &str) -> Vec<UngVien> {
     let thap = tieng.to_lowercase();
     let mut ra: Vec<UngVien> = Vec::new();
 
-    // Thanh của bản gốc, nếu có. Ứng viên giữ nguyên thanh gốc được ưu tiên:
-    // người ta hiếm khi gõ nhầm dấu thanh mà đúng mọi thứ khác.
-    let thanh_goc = thap.chars().map(|c| am_tiet::bo_thanh(c).1).find(|&t| t != am_tiet::NGANG);
+    // Thanh của bản gốc. Ứng viên giữ nguyên thanh gốc được ưu tiên: người ta
+    // hiếm khi gõ nhầm dấu thanh mà đúng mọi thứ khác.
+    //
+    // Không thấy dấu nào thì thanh gốc là **thanh ngang**, không phải "không
+    // có". Để `None` là hỏng lặng lẽ: mọi thanh đều bị tính là khác thanh gốc,
+    // kể cả thanh ngang, nên `đnag` cho ra `đang`, `đàng`, `đáng`, `đãng` hoà
+    // giá nhau hết — trong khi `đang` mới là bản giữ nguyên đúng thứ người ta gõ.
+    let thanh_goc = Some(
+        thap.chars()
+            .map(|c| am_tiet::bo_thanh(c).1)
+            .find(|&t| t != am_tiet::NGANG)
+            .unwrap_or(am_tiet::NGANG),
+    );
 
     // Bộ 1 — đổi dấu phụ, giữ nguyên bộ khung chữ cái.
     let khong_thanh: String = thap.chars().map(|c| am_tiet::bo_thanh(c).0).collect();
@@ -66,13 +83,13 @@ pub fn sinh(tieng: &str) -> Vec<UngVien> {
         them_moi_thanh(&bt, thanh_goc, gia_nen * 2, &mut ra);
     }
 
-    // Bộ 2 — thêm/bớt/đảo một chữ cái. Đắt hơn bộ 1 vì đây là gõ trượt phím,
-    // hiếm hơn là quên dấu.
-    for bt in sua_mot_chu(&khong_thanh) {
-        them_moi_thanh(&bt, thanh_goc, 6, &mut ra);
+    // Bộ 2 — thêm/bớt/đảo/thay một chữ cái. Đắt hơn bộ 1 vì đây là gõ trượt
+    // phím, hiếm hơn là quên dấu.
+    for (bt, gia_sua) in sua_mot_chu(&khong_thanh) {
+        them_moi_thanh(&bt, thanh_goc, gia_sua, &mut ra);
         // Đổi dấu phụ *sau khi* thêm bớt chữ: `nguoiw` kiểu gõ hỏng cần cả hai.
         for bt2 in doi_dau_phu(&bt) {
-            let g = 6 + khac_bao_nhieu(&bt, &bt2) * 2;
+            let g = gia_sua + khac_bao_nhieu(&bt, &bt2) * 2;
             them_moi_thanh(&bt2, thanh_goc, g, &mut ra);
         }
     }
@@ -165,7 +182,30 @@ const CHU_CAI: [char; 27] = [
 /// Sinh ra được vì mọi ứng viên đều bị lọc hai lần: [`sinh`] bỏ chuỗi không
 /// ghép thành tiếng hợp lệ, rồi tầng trên bỏ tiếp những tiếng không có trong từ
 /// điển. Cái còn lại chỉ vài chục.
-fn sua_mot_chu(khung: &str) -> Vec<String> {
+fn sua_mot_chu(khung: &str) -> Vec<(String, u32)> {
+    /// Giá gốc của một phép sửa một chữ.
+    const GIA: u32 = 6;
+    /// Giá của phép **đảo hai chữ liền nhau**, rẻ hơn mọi phép khác.
+    ///
+    /// Đảo chữ giữ nguyên **từng ký tự** người ta đã gõ, chỉ đổi thứ tự; xoá
+    /// hay chèn thì thêm bớt hẳn một chữ. Cùng lý do tách chữ dính được xét
+    /// trước sửa chữ: cách nào giữ được nhiều thứ người viết đã gõ hơn thì gần
+    /// bản gốc hơn.
+    ///
+    /// Không phân ra thì `khôgn` cho `khôn` (xoá `g`) và `không` (đảo `gn`)
+    /// cùng giá, rồi `khôn` thắng vì đứng trước trong bảng chữ cái.
+    const GIA_DAO: u32 = 4;
+    /// Phụ thu khi phép thay đụng vào **nguyên âm**.
+    ///
+    /// Đổi phụ âm cuối là lỗi phổ biến bậc nhất của tiếng Việt — lẫn `n` với
+    /// `ng`, `nh` với `ng`, `c` với `t`. Đổi nguyên âm giữa từ thì hiếm hơn
+    /// nhiều, vì nguyên âm mới là chỗ người viết nhớ rõ nhất.
+    ///
+    /// Không phân hai loại thì chúng hoà giá, và ai thắng là do thứ tự bảng chữ
+    /// cái: `đing` cho ra `đinh` và `đang` cùng giá, rồi `đang` thắng vì `a`
+    /// đứng trước `i`.
+    const PHU_THU_NGUYEN_AM: u32 = 2;
+
     let ky_tu: Vec<char> = khung.chars().collect();
     let mut ra = Vec::new();
     for i in 0..ky_tu.len() {
@@ -173,22 +213,33 @@ fn sua_mot_chu(khung: &str) -> Vec<String> {
         let mut m = ky_tu.clone();
         m.remove(i);
         if m.len() >= 2 {
-            ra.push(m.into_iter().collect());
+            ra.push((m.into_iter().collect(), GIA));
         }
-        // Đảo chữ i với i+1 — bắt lỗi gõ nhanh: `nhưgn`, `khôgn`, `độgn`.
+        // Đảo chữ i với i+1 — bắt lỗi gõ nhanh: `nhưgn`, `khôgn`, `độgn`, `đnag`.
         if i + 1 < ky_tu.len() {
             let mut m = ky_tu.clone();
             m.swap(i, i + 1);
-            ra.push(m.into_iter().collect());
+            ra.push((m.into_iter().collect(), GIA_DAO));
         }
         // Thay chữ thứ i — bắt lỗi trượt phím: `khônh` → `không`.
         for &c in CHU_CAI.iter() {
             if c == ky_tu[i] {
                 continue;
             }
+            // Không bao giờ đổi `đ` thành `d`: hai phụ âm khác nhau, và không ai
+            // vô tình gõ `đ` (phải gõ `dd`) khi định gõ `d`. Xem [`cung_nen`].
+            if ky_tu[i] == 'đ' && c == 'd' {
+                continue;
+            }
             let mut m = ky_tu.clone();
             m[i] = c;
-            ra.push(m.into_iter().collect());
+            let gia = GIA
+                + if am_tiet::la_nguyen_am(ky_tu[i]) || am_tiet::la_nguyen_am(c) {
+                    PHU_THU_NGUYEN_AM
+                } else {
+                    0
+                };
+            ra.push((m.into_iter().collect(), gia));
         }
     }
     // Chèn một chữ vào mọi vị trí, kể cả đầu và cuối — bắt lỗi hụt phím:
@@ -197,7 +248,7 @@ fn sua_mot_chu(khung: &str) -> Vec<String> {
         for &c in CHU_CAI.iter() {
             let mut m = ky_tu.clone();
             m.insert(i, c);
-            ra.push(m.into_iter().collect());
+            ra.push((m.into_iter().collect(), GIA));
         }
     }
     ra
@@ -237,6 +288,45 @@ mod kiem {
                 assert!(am_tiet::hop_le(&u.chu), "ứng viên không hợp lệ: {}", u.chu);
             }
         }
+    }
+
+    /// Ứng viên đứng đầu bảng — cái mà bộ sửa chọn khi không có bằng chứng nào khác.
+    fn dau_bang(tieng: &str) -> String {
+        sinh(tieng).first().map(|u| u.chu.clone()).unwrap_or_default()
+    }
+
+    #[test]
+    fn chu_khong_dau_thi_uu_tien_ung_vien_khong_dau() {
+        // `đnag` là `đang` gõ đảo hai chữ. Bản đầu để "thanh gốc" là *không có*
+        // thay vì *thanh ngang*, nên mọi thanh đều bị tính là khác thanh gốc —
+        // `đang`, `đàng`, `đáng`, `đãng` hoà giá nhau hết, rồi ai thắng là do
+        // thứ tự bảng chữ cái.
+        assert_eq!(dau_bang("đnag"), "đang");
+        assert_eq!(dau_bang("khôgn"), "không");
+    }
+
+    #[test]
+    fn doi_phu_am_re_hon_doi_nguyen_am() {
+        // `đing` → `đinh` (đổi phụ âm cuối) phải rẻ hơn `đang` (đổi nguyên âm).
+        // Lẫn phụ âm cuối `n`/`ng`/`nh` là lỗi phổ biến bậc nhất của tiếng
+        // Việt; đổi nguyên âm giữa từ thì hiếm hơn nhiều.
+        let uv = sinh("đing");
+        let gia = |c: &str| uv.iter().find(|u| u.chu == c).map(|u| u.gia);
+        assert!(gia("đinh") < gia("đang"), "{uv:?}");
+    }
+
+    #[test]
+    fn khong_bao_gio_doi_d_gach_thanh_d_thuong() {
+        // `đ` và `d` là hai phụ âm khác nhau. Thiếu dấu là chuyện thường (`dang`
+        // khi định gõ `đang`), nhưng chiều ngược lại thì không: muốn ra `đ` phải
+        // gõ hẳn `dd`.
+        assert!(
+            sinh("đang").iter().all(|u| !u.chu.starts_with('d')),
+            "{:?}",
+            sinh("đang").iter().filter(|u| u.chu.starts_with('d')).collect::<Vec<_>>()
+        );
+        // Chiều đúng vẫn phải còn.
+        assert!(sinh("dang").iter().any(|u| u.chu == "đang"));
     }
 
     #[test]

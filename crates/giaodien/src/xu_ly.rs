@@ -84,6 +84,7 @@ pub fn xu_ly(
     bao.buoc("Lượt 1/2 — đọc cả sách để đếm kiểu đặt dấu thanh");
     let mot_phan = (chi_so.len() / 20).max(1);
     let mut dem = DemKieu::default();
+    let mut dem_ten = std::collections::HashMap::new();
     let mut so_doan_doc = 0usize;
     for (k, &i) in chi_so.iter().enumerate() {
         if k % mot_phan == 0 {
@@ -98,7 +99,16 @@ pub fn xu_ly(
         };
         for d in quet::quet(&noi_dung) {
             so_doan_doc += 1;
-            dau_thanh::dem(&d.chu, &mut dem);
+            // **Dựng lại NFC trước khi đếm bất cứ thứ gì.** Chữ gõ rời (`ề` =
+            // e + dấu huyền rời) bị dấu tổ hợp cắt đôi ngay giữa từ, vì dấu tổ
+            // hợp không phải chữ cái — `Huyền` ra thành `Huyê` và `n`. Bỏ bước
+            // này thì bảng tên riêng đầy mảnh chữ cụt (`huyê`, `nguyê`, `chươ`)
+            // và bảng đếm kiểu đặt dấu thì hụt.
+            let chu = chinhta::chuan_hoa::dung_lai_nfc(&d.chu).unwrap_or_else(|| d.chu.clone());
+            dau_thanh::dem(&chu, &mut dem);
+            // Gom tên riêng ngay trong lượt đọc này. Đi thêm một lượt nữa chỉ
+            // để đếm tên thì tốn gấp đôi thời gian đọc cả bộ truyện.
+            chinhta::soat::gom_ten_rieng(&chu, &mut dem_ten);
         }
     }
     kq.dem_kieu = dem;
@@ -123,7 +133,17 @@ pub fn xu_ly(
     } else {
         "Lượt 2/2 — soát và sửa, không có mô hình ngôn ngữ"
     });
-    let bo = BoSoat::moi(tuy_chon, kq.kieu_dau);
+    let ten_rieng = chinhta::soat::chot_ten_rieng(dem_ten);
+    if !ten_rieng.is_empty() {
+        let mut v: Vec<&String> = ten_rieng.iter().collect();
+        v.sort();
+        bao.chi_tiet(format!(
+            "{} tên riêng đếm được từ chính cuốn sách, sẽ không đụng tới: {}",
+            v.len(),
+            v.iter().take(15).map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+        ));
+    }
+    let bo = BoSoat::moi(tuy_chon, kq.kieu_dau).voi_ten_rieng(ten_rieng);
     let mut da_sua_file: Vec<usize> = Vec::new();
 
     for (k, &i) in chi_so.iter().enumerate() {

@@ -128,11 +128,23 @@ pub fn tach_dinh(tieng: &str) -> Vec<String> {
     // hỏng nào cũng chia được kiểu ấy.
     ra.retain(|p| p.iter().any(|m| m.chars().count() >= 3));
 
-    // Ít mảnh trước; cùng số mảnh thì cách nào dựng được từ ghép trong từ điển
-    // đứng trước.
+    // Mảnh **một chữ** chỉ được chấp nhận khi cả cách chia là một từ ghép có
+    // thật. Hai luật ấy đi cùng nhau: bỏ luật sau thì `cuốic` thành `cu ố ic`
+    // vì từ điển có cả `ố`; giữ luật sau thì `erằng` vẫn ra được `e rằng`, vốn
+    // là một mục trong từ điển từ ghép.
+    ra.retain(|p| {
+        p.iter().all(|m| m.chars().count() >= 2) || co_tu_ghep(&p.join(" "))
+    });
+
+    // **Cách chia dựng được nguyên một từ ghép đứng trước hết.** Đó là bằng
+    // chứng mạnh nhất có thể có cho một chỗ dính: không chữ nào sai, và cái
+    // ghép lại được là một từ có sẵn trong từ điển.
+    //
+    // Sau đó mới tới ít mảnh, rồi tới số cặp liền nhau dựng được từ ghép.
     ra.sort_by_key(|p| {
-        let ghep = p.windows(2).filter(|w| co_tu_ghep(&format!("{} {}", w[0], w[1]))).count();
-        (p.len(), std::cmp::Reverse(ghep))
+        let day_du = !co_tu_ghep(&p.join(" "));
+        let cap = p.windows(2).filter(|w| co_tu_ghep(&format!("{} {}", w[0], w[1]))).count();
+        (day_du, p.len(), std::cmp::Reverse(cap))
     });
     ra.into_iter().map(|p| p.join(" ")).collect()
 }
@@ -169,7 +181,9 @@ fn chia(ky_tu: &[char], tu: usize, dang: &mut Vec<String>, ra: &mut Vec<Vec<Stri
     // nên `cơmăn` không tách được. Chấp nhận — ca ấy vốn cũng nhập nhằng với
     // `cơ măn`, mà đoán sai thì tệ hơn bỏ sót.
     let dau_manh_phai_la_phu_am = !dang.is_empty();
-    for het in tu + 2..=ky_tu.len() {
+    // Mảnh một chữ vẫn được sinh ra ở đây; [`tach_dinh`] lọc lại, vì chỉ ở đó
+    // mới biết cả cách chia có phải một từ ghép có thật hay không.
+    for het in tu + 1..=ky_tu.len() {
         let manh: String = ky_tu[tu..het].iter().collect();
         if dau_manh_phai_la_phu_am && crate::am_tiet::la_nguyen_am(ky_tu[tu]) {
             break; // ký tự đầu mảnh không đổi theo `het`, nên hỏng là hỏng cả
@@ -256,6 +270,23 @@ mod kiem {
         for t in ["việcc", "cuốic", "trốngm", "trụcc", "khôngg", "bứac"] {
             assert!(tach_dinh(t).is_empty(), "`{t}` không được tách: {:?}", tach_dinh(t));
         }
+    }
+
+    #[test]
+    fn manh_mot_chu_chi_duoc_khi_ca_cum_la_tu_ghep() {
+        // `e rằng` có trong từ điển từ ghép nên mảnh một chữ `e` được chấp nhận.
+        assert_eq!(tach_dinh("erằng").first().map(|s| s.as_str()), Some("e rằng"));
+        // Còn `cuốic` chia được thành `cu ố ic` — cũng có mảnh một chữ, nhưng
+        // cả cụm không phải từ ghép nào cả.
+        assert!(tach_dinh("cuốic").is_empty(), "{:?}", tach_dinh("cuốic"));
+    }
+
+    #[test]
+    fn cach_chia_thanh_tu_ghep_dung_dau_bang() {
+        // Dựng lại được nguyên một từ ghép là bằng chứng mạnh nhất, nên nó phải
+        // vượt cả tiêu chí "ít mảnh hơn".
+        let p = tach_dinh("erằng");
+        assert!(co_tu_ghep(&p[0]), "cách chia đầu bảng không phải từ ghép: {:?}", p);
     }
 
     #[test]
