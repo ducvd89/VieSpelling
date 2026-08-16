@@ -39,8 +39,13 @@ pub enum Loai {
     AmTietSai,
     /// Cặp dễ nhầm, phải nhìn ngữ cảnh mới phân được.
     DeNham,
-    /// Di sản của bản quét: gạch nối cuối dòng, chữ dính, `l` lẫn `1`.
-    Ocr,
+    /// Hai tiếng dính liền vì mất khoảng trắng: `Phúlần` → `Phú lần`.
+    ///
+    /// Tách khỏi [`Loai::AmTietSai`] vì bằng chứng khác hẳn về chất: ở đây
+    /// **không chữ cái nào sai**, chỉ thiếu một khoảng trắng. Gộp chung thì báo
+    /// cáo không cho người đọc thấy sự khác biệt ấy, mà nó là khác biệt giữa
+    /// "máy giữ nguyên từng ký tự bạn gõ" và "máy đoán bạn định gõ gì".
+    DinhChu,
 }
 
 impl Loai {
@@ -54,7 +59,7 @@ impl Loai {
             Loai::KieuDau => "Kiểu đặt dấu",
             Loai::AmTietSai => "Tiếng sai",
             Loai::DeNham => "Dễ nhầm",
-            Loai::Ocr => "Bản quét",
+            Loai::DinhChu => "Dính chữ",
         }
     }
 }

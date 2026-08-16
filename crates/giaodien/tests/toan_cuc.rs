@@ -46,6 +46,8 @@ fn chuong() -> String {
     s.push_str("<p>Tình thuơng của mẹ thật lớn.</p>\n");
     // Tiếng sai cấu tạo mà **không** hàng xóm nào quyết được — phải để ngỏ.
     s.push_str("<p>Ừ thuơng à.</p>\n");
+    // Hai tiếng dính liền vì mất khoảng trắng.
+    s.push_str("<p>Nhà Phúlần ở cuối làng.</p>\n");
     // Không được đụng: số kiểu Việt Nam, tên riêng nước ngoài, thực thể XML.
     s.push_str("<p>Giá 1,5 triệu và 12.000 đồng lúc 10:30.</p>\n");
     s.push_str("<p>Giáo sư Dumbledore nhìn Voldemort &amp; bỏ đi.</p>\n");
@@ -130,6 +132,18 @@ fn tu_ghep_sua_duoc_ma_khong_can_mo_hinh() {
     // `tình thuơng` → `tình thương`: từ điển có `tình thương` mà không có
     // `tình thường`. Bằng chứng dứt khoát nên sửa ngay, không cần mô hình.
     assert!(ch.contains("Tình thương của mẹ"), "chưa dùng bằng chứng từ ghép:\n{ch}");
+}
+
+#[test]
+fn tach_duoc_hai_tieng_dinh_lien() {
+    let (kq, ch) = chay("dinh");
+    assert!(ch.contains("Nhà Phú lần ở cuối làng"), "chưa tách chữ dính:\n{ch}");
+    // Phải mang nhãn riêng, không lẫn vào `Tiếng sai`: ở đây không chữ cái nào
+    // sai, chỉ thiếu một khoảng trắng.
+    assert!(
+        kq.da_sua.iter().any(|s| s.loai == chinhta::sua::Loai::DinhChu),
+        "không dán nhãn Dính chữ"
+    );
 }
 
 #[test]

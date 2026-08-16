@@ -192,7 +192,37 @@ impl BoSoat {
             }
             let truoc = i.checked_sub(1).map(|k| tu[k].chu);
             let sau = tu.get(i + 1).map(|x| x.chu);
-            let (uv, dut_khoat) = xep_hang_ung_vien(t.chu, truoc, sau);
+
+            let uv_tho = ung_vien::sinh(t.chu);
+
+            // Tách chữ dính xét **trước** phép sửa chữ, vì nó giữ nguyên từng ký
+            // tự người ta đã gõ còn sửa chữ thì đoán họ định gõ gì — bằng chứng
+            // khác hẳn về chất, không đem ra so bằng cùng một thước được.
+            //
+            // Không cần chặn thêm ở đây: [`tu_dien::tach_dinh`] đã đòi mảnh sau
+            // mở đầu bằng phụ âm, và chính luật ấy loại hết những ca lẽ ra phải
+            // sửa như một tiếng (`phảii`, `Huoàng`, `khuyếch`). Từng thử chặn
+            // bằng "sửa được thành một tiếng thì đừng tách", nhưng luật ấy loại
+            // nhầm cả ca đúng: `Phúlần` xoá chữ `l` ra `Phuần`, một tiếng hợp lệ.
+            let tach_duoc = tu_dien::tach_dinh(t.chu);
+            if !tach_duoc.is_empty() {
+                let ung_vien: Vec<String> =
+                    tach_duoc.iter().map(|x| chen_khoang_trang(t.chu, x)).collect();
+                ra.push(ChoXet {
+                    pham_vi: t.dau..t.cuoi,
+                    goc: t.chu.to_string(),
+                    ly_do: format!("`{}` là hai tiếng dính liền — `{}`", t.chu, ung_vien[0]),
+                    ung_vien,
+                    loai: Loai::DinhChu,
+                    // Dứt khoát khi **chỉ có một** cách chia. Nhiều cách chia
+                    // thì phải cân nhắc thật, vì chọn sai chỗ ngắt là đổi hẳn
+                    // nghĩa câu.
+                    chac_nho_tu_ghep: tach_duoc.len() == 1,
+                });
+                continue;
+            }
+
+            let (uv, dut_khoat) = xep_hang_ung_vien(uv_tho, truoc, sau);
             if uv.is_empty() {
                 continue;
             }
@@ -387,11 +417,10 @@ fn cau_chua(chu: &str, r: &Range<usize>) -> Range<usize> {
 /// ca thuộc loại này, và phần lớn ca sai đều là ca mà từ ghép phân được ngay.
 /// Nên bằng chứng từ ghép đặt **trước** mô hình, không phải sau.
 fn xep_hang_ung_vien(
-    tieng: &str,
+    mut uv: Vec<ung_vien::UngVien>,
     truoc: Option<&str>,
     sau: Option<&str>,
 ) -> (Vec<String>, bool) {
-    let mut uv = ung_vien::sinh(tieng);
     if uv.is_empty() {
         return (Vec::new(), false);
     }
@@ -420,6 +449,40 @@ fn xep_hang_ung_vien(
         *k > 0 && ghep.get(1).is_none_or(|(k2, u2)| (*k, u.gia) != (*k2, u2.gia))
     });
     (ghep.into_iter().map(|(_, u)| u.chu).collect(), dut_khoat)
+}
+
+/// Chèn khoảng trắng vào **chính chuỗi gốc**, theo cách chia đã tìm được.
+///
+/// [`tu_dien::tach_dinh`] làm việc trên bản viết thường nên kết quả của nó mất
+/// hết chữ hoa. Không được lấy thẳng: chữ dính hay dính đúng ở chỗ tên riêng
+/// (`mựcMinh`, `HuyềnVũ`, `LãoTạ`), mà đó cũng là chỗ chữ hoa mang thông tin.
+/// Lấy thẳng thì ra `mực minh`, `Huyền vũ` — tách đúng chỗ nhưng xoá mất tên
+/// người.
+///
+/// Nên chỉ lấy **vị trí ngắt** từ cách chia, rồi cắt trên chuỗi gốc. Như thế
+/// từng ký tự giữ nguyên hình dạng người ta đã gõ, và phép sửa này thật sự chỉ
+/// thêm vào mấy khoảng trắng.
+fn chen_khoang_trang(goc: &str, cach_chia: &str) -> String {
+    let ky_tu: Vec<char> = goc.chars().collect();
+    let mut ra = String::with_capacity(goc.len() + 4);
+    let mut vt = 0usize;
+    for (i, manh) in cach_chia.split(' ').enumerate() {
+        let n = manh.chars().count();
+        if vt + n > ky_tu.len() {
+            // Cách chia không khớp độ dài chuỗi gốc — không thể xảy ra, nhưng
+            // thà trả về bản viết thường còn hơn cắt vào giữa chữ.
+            return cach_chia.to_string();
+        }
+        if i > 0 {
+            ra.push(' ');
+        }
+        ra.extend(&ky_tu[vt..vt + n]);
+        vt += n;
+    }
+    if vt != ky_tu.len() {
+        return cach_chia.to_string();
+    }
+    ra
 }
 
 fn thay_mot_cho(goc: &str, r: &Range<usize>, moi: &str) -> String {

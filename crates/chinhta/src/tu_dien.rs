@@ -85,6 +85,109 @@ pub fn khop_hang_xom(truoc: Option<&str>, tieng: &str, sau: Option<&str>) -> usi
     n
 }
 
+/// Số phần tối đa khi tách một chuỗi chữ dính.
+///
+/// Bốn là đủ cho mọi ca gặp thật: chữ dính sinh ra khi bóc thẻ HTML hoặc
+/// chuyển từ PDF, mà chỗ dính thường chỉ là một hai khoảng trắng bị nuốt. Nới
+/// hơn thì mỗi chuỗi dài đẻ ra hàng nghìn cách chia, và cách chia nào cũng
+/// "hợp lệ" theo nghĩa từng mảnh có trong từ điển — tức là mất hết sức thuyết
+/// phục.
+const TOI_DA_PHAN: usize = 4;
+
+/// Tách một chuỗi chữ **dính liền** thành các tiếng có trong từ điển.
+///
+/// `Phúlần` → `phú lần`. Trả về danh sách cách chia, ít mảnh trước.
+///
+/// Đây là lớp lỗi riêng, và nó khác mọi lỗi khác ở một điểm quyết định: **không
+/// chữ cái nào sai**, chỉ thiếu khoảng trắng. Nên bằng chứng mạnh hơn hẳn phép
+/// sửa một chữ — sửa chữ là đoán người ta định gõ gì, còn tách chữ thì giữ
+/// nguyên từng ký tự người ta đã gõ.
+///
+/// Hai lưới chặn để khỏi băm nhỏ chữ vô tội:
+///
+/// - Chỉ gọi cho tiếng **đã bị bắt** là không có trong từ điển và sai cấu tạo.
+///   Chữ đúng không bao giờ đi qua đây, nên `giác` không thể thành `gi ác`.
+/// - Mỗi mảnh phải **có trong từ điển** và **có nguyên âm**. Nếu không thì
+///   `việcc` thành `việc` + `c`, `cuốic` thành `cuối` + `c` — đổi một lỗi lấy
+///   một lỗi tệ hơn.
+pub fn tach_dinh(tieng: &str) -> Vec<String> {
+    let thap = tieng.to_lowercase();
+    let ky_tu: Vec<char> = thap.chars().collect();
+    // Ngắn quá thì không phải chữ dính mà là lỗi gõ, dài quá thì số cách chia
+    // bùng nổ. Ngưỡng 5 chặn đúng lớp nguy hiểm: `bứac` (4 chữ) chia được thành
+    // `bứ ac` vì cả hai mảnh đều có trong từ điển, mà nó là lỗi gõ chứ không
+    // phải chữ dính.
+    if ky_tu.len() < 5 || ky_tu.len() > 24 {
+        return Vec::new();
+    }
+    let mut ra: Vec<Vec<String>> = Vec::new();
+    let mut dang: Vec<String> = Vec::new();
+    chia(&ky_tu, 0, &mut dang, &mut ra);
+    // Phải có ít nhất một mảnh từ ba chữ trở lên. Cách chia toàn mảnh hai chữ
+    // gần như luôn là băm vụn: từ điển có đủ `cu`, `ố`, `ic`, `ac` nên chuỗi
+    // hỏng nào cũng chia được kiểu ấy.
+    ra.retain(|p| p.iter().any(|m| m.chars().count() >= 3));
+
+    // Ít mảnh trước; cùng số mảnh thì cách nào dựng được từ ghép trong từ điển
+    // đứng trước.
+    ra.sort_by_key(|p| {
+        let ghep = p.windows(2).filter(|w| co_tu_ghep(&format!("{} {}", w[0], w[1]))).count();
+        (p.len(), std::cmp::Reverse(ghep))
+    });
+    ra.into_iter().map(|p| p.join(" ")).collect()
+}
+
+fn chia(ky_tu: &[char], tu: usize, dang: &mut Vec<String>, ra: &mut Vec<Vec<String>>) {
+    if tu == ky_tu.len() {
+        if dang.len() >= 2 {
+            ra.push(dang.clone());
+        }
+        return;
+    }
+    if dang.len() >= TOI_DA_PHAN {
+        return;
+    }
+    // Mảnh **tối thiểu hai chữ**. Từ điển có cả những mục một chữ (`à`, `ố`,
+    // `ừ`), nên cho phép mảnh một chữ thì mọi lỗi thừa chữ biến thành lỗi dính
+    // chữ: `việcc` thành `việc c`, `cuốic` thành `cuối c`. Đổi một lỗi lấy một
+    // lỗi tệ hơn, vì nó thêm hẳn một "chữ" vào câu.
+    // Mảnh **từ thứ hai trở đi phải bắt đầu bằng phụ âm**.
+    //
+    // Đây là lưới chặn quan trọng nhất, và nó suy từ số liệu chứ không từ suy
+    // đoán. Đo trên một bộ truyện dài, mọi cách tách **đúng** đều có mảnh sau
+    // mở đầu bằng phụ âm — `phú lần`, `nó không`, `các vị`, `mực Minh`,
+    // `Huyền Vũ` — còn mọi cách tách **sai** đều có mảnh sau mở đầu bằng nguyên
+    // âm: `phả ii`, `hu oàng`, `khuy ếch`, `tứ ước`, `ngo oại`, `hi ệnh`.
+    //
+    // Có lý do: chỗ ấy không phải hai tiếng dính nhau mà là **một nguyên âm bị
+    // gõ lặp** trong cùng một tiếng. `Huoàng` là `Hoàng` thừa chữ u, `phảii` là
+    // `phải` thừa chữ i. Tách ra thì được hai chữ đều có trong từ điển mà câu
+    // thành vô nghĩa — kiểu hỏng khó thấy nhất, vì bản sửa trông vẫn "đúng
+    // tiếng Việt".
+    //
+    // Cái giá: tiếng Việt có tiếng mở đầu bằng nguyên âm (`ăn`, `uống`, `ông`)
+    // nên `cơmăn` không tách được. Chấp nhận — ca ấy vốn cũng nhập nhằng với
+    // `cơ măn`, mà đoán sai thì tệ hơn bỏ sót.
+    let dau_manh_phai_la_phu_am = !dang.is_empty();
+    for het in tu + 2..=ky_tu.len() {
+        let manh: String = ky_tu[tu..het].iter().collect();
+        if dau_manh_phai_la_phu_am && crate::am_tiet::la_nguyen_am(ky_tu[tu]) {
+            break; // ký tự đầu mảnh không đổi theo `het`, nên hỏng là hỏng cả
+        }
+        // Mảnh không có nguyên âm thì không phải tiếng. Chặn ở đây rẻ hơn tra
+        // từ điển, và nó là lưới bắt phần lớn ca hỏng: `việc` + `c`.
+        if !manh.chars().any(crate::am_tiet::la_nguyen_am) {
+            continue;
+        }
+        if !co_am_tiet(&manh) {
+            continue;
+        }
+        dang.push(manh);
+        chia(ky_tu, het, dang, ra);
+        dang.pop();
+    }
+}
+
 pub fn so_am_tiet() -> usize {
     kho_am_tiet().len()
 }
@@ -135,6 +238,41 @@ mod kiem {
         assert!(!co_tu_ghep("chừ ta"));
         assert_eq!(khop_hang_xom(None, "chúng", Some("ta")), 1);
         assert_eq!(khop_hang_xom(None, "chừ", Some("ta")), 0);
+    }
+
+    #[test]
+    fn tach_duoc_chu_dinh() {
+        assert_eq!(tach_dinh("Phúlần").first().map(|s| s.as_str()), Some("phú lần"));
+        assert!(tach_dinh("củangười").contains(&"của người".to_string()));
+        assert!(tach_dinh("khôngbiết").contains(&"không biết".to_string()));
+    }
+
+    #[test]
+    fn khong_tach_khi_mot_manh_khong_phai_tieng() {
+        // Đây là lưới chặn quan trọng nhất. Không có nó thì mọi lỗi thừa chữ
+        // biến thành lỗi dính chữ: `việcc` thành `việc c`, `cuốic` thành
+        // `cuối c`, `trốngm` thành `trống m` — đổi một lỗi lấy một lỗi tệ hơn,
+        // vì nó thêm hẳn một "chữ" vào câu.
+        for t in ["việcc", "cuốic", "trốngm", "trụcc", "khôngg", "bứac"] {
+            assert!(tach_dinh(t).is_empty(), "`{t}` không được tách: {:?}", tach_dinh(t));
+        }
+    }
+
+    #[test]
+    fn khong_tach_chu_qua_ngan_hay_qua_dai() {
+        assert!(tach_dinh("gì").is_empty());
+        assert!(tach_dinh("bứac").is_empty(), "4 chữ thì là lỗi gõ, không phải chữ dính");
+        assert!(tach_dinh(&"a".repeat(40)).is_empty());
+    }
+
+    #[test]
+    fn cach_chia_it_manh_dung_truoc() {
+        // `củangười` chia được thành `của người` (2 mảnh) lẫn `củ a ngư ời`
+        // kiểu vụn hơn. Ít mảnh phải đứng trước, không thì bộ sửa băm chữ.
+        let p = tach_dinh("củangười");
+        assert!(!p.is_empty());
+        let so_manh = |s: &str| s.split(' ').count();
+        assert_eq!(so_manh(&p[0]), 2, "cách chia đầu bảng: {:?}", p[0]);
     }
 
     #[test]

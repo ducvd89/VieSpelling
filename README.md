@@ -20,6 +20,7 @@ tốn của người dùng nhiều hơn bỏ sót.
 | Dấu thanh đặt sai nguyên âm | `qúy`→`quý`, `đựơc`→`được`, `chuỵên`→`chuyện` | luôn |
 | Kiểu đặt dấu | `hoà` ⇄ `hòa`, kéo về kiểu đa số của chính cuốn sách | tuỳ chọn |
 | Cặp dễ nhầm, dạng luôn sai | `xử dụng`→`sử dụng`, `che dấu`→`che giấu` | luôn |
+| Hai tiếng dính liền | `Phúlần`→`Phú lần`, `HuyềnVũ`→`Huyền Vũ` | luôn |
 | Tiếng sai, hàng xóm quyết được | `chúg ta`→`chúng ta`, `tình thuơng`→`tình thương` | luôn |
 | Tiếng sai, không ai quyết được | `Ừ thuơng à` | cần mô hình |
 | Cặp dễ nhầm, tuỳ nghĩa | `dành`/`giành`, `chia sẻ`/`chia xẻ` | cần mô hình |
@@ -41,6 +42,19 @@ Thứ tự ấy không đảo được. Chỉ dùng bảng vần thì 1.813 từ
 Bằng chứng từ ghép **đặt trước mô hình ngôn ngữ**, vì nó là sự thật về tiếng
 Việt chứ không phải một ước lượng: đo trên một cuốn sách thì mô hình 9 tỷ tham
 số chọn sai khoảng 40% số ca thuộc loại này, mà từ ghép phân được ngay.
+
+### Chữ dính xét trước chữ sai
+
+Sách convert từ PDF hoặc bị bóc thẻ HTML hay nuốt mất khoảng trắng — đo được
+231 chỗ trong một bộ truyện. Lớp lỗi này khác mọi lớp khác ở chỗ **không chữ cái
+nào sai**, chỉ thiếu một khoảng trắng, nên phép sửa giữ nguyên từng ký tự người
+ta đã gõ thay vì đoán họ định gõ gì.
+
+Lưới chặn: mảnh từ thứ hai trở đi phải **mở đầu bằng phụ âm**. Mảnh mở đầu bằng
+nguyên âm gần như luôn là một nguyên âm bị gõ lặp trong cùng một tiếng —
+`Huoàng` là `Hoàng` thừa chữ u, `phảii` là `phải` thừa chữ i. Tách chúng ra thì
+được hai chữ đều có trong từ điển mà câu thành vô nghĩa: kiểu hỏng khó thấy
+nhất, vì bản sửa trông vẫn đúng tiếng Việt.
 
 ## Nó cố ý KHÔNG sửa gì
 
