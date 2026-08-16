@@ -69,20 +69,39 @@ pub fn co_tu_ghep(cum: &str) -> bool {
 /// Đây là phép chấm điểm ứng viên rẻ nhất và chắc nhất mà ứng dụng có. Trả về
 /// số từ ghép dựng được (0, 1 hoặc 2) — nhiều hơn nghĩa là ứng viên khớp cả hai
 /// phía, gần như chắc chắn đúng.
+/// `tieng` có thể là **nhiều tiếng** cách nhau bằng khoảng trắng — đó là dạng
+/// của một ứng viên tách chữ dính. Lúc ấy mảnh đầu ghép với chữ bên trái, mảnh
+/// cuối ghép với chữ bên phải.
 pub fn khop_hang_xom(truoc: Option<&str>, tieng: &str, sau: Option<&str>) -> usize {
     let t = tieng.to_lowercase();
+    let dau = t.split(' ').next().unwrap_or(&t);
+    let cuoi = t.split(' ').next_back().unwrap_or(&t);
     let mut n = 0;
     if let Some(p) = truoc {
-        if co_tu_ghep(&format!("{} {t}", p.to_lowercase())) {
+        if co_tu_ghep(&format!("{} {dau}", p.to_lowercase())) {
             n += 1;
         }
     }
     if let Some(s) = sau {
-        if co_tu_ghep(&format!("{t} {}", s.to_lowercase())) {
+        if co_tu_ghep(&format!("{cuoi} {}", s.to_lowercase())) {
             n += 1;
         }
     }
+    // Bản thân cách tách dựng lại được một từ ghép cũng là một điểm khớp:
+    // `erằng` → `e rằng`.
+    if t.contains(' ') && co_tu_ghep(&t) {
+        n += 1;
+    }
     n
+}
+
+/// Ứng viên này có phải chữ có thật không — nhận cả ứng viên **nhiều tiếng**.
+pub fn ung_vien_co_that(chu: &str) -> bool {
+    if chu.contains(' ') {
+        chu.split(' ').all(co_am_tiet)
+    } else {
+        co_am_tiet(chu)
+    }
 }
 
 /// Số phần tối đa khi tách một chuỗi chữ dính.
@@ -128,25 +147,71 @@ pub fn tach_dinh(tieng: &str) -> Vec<String> {
     // hỏng nào cũng chia được kiểu ấy.
     ra.retain(|p| p.iter().any(|m| m.chars().count() >= 3));
 
-    // Mảnh **một chữ** chỉ được chấp nhận khi cả cách chia là một từ ghép có
-    // thật. Hai luật ấy đi cùng nhau: bỏ luật sau thì `cuốic` thành `cu ố ic`
-    // vì từ điển có cả `ố`; giữ luật sau thì `erằng` vẫn ra được `e rằng`, vốn
-    // là một mục trong từ điển từ ghép.
+    // Mảnh **một chữ** chỉ được chấp nhận khi cách chia có đúng **hai mảnh**,
+    // hoặc khi cả cụm là một từ ghép có thật.
+    //
+    // Từ điển có cả những mục một chữ (`à`, `ố`, `ừ`, `ở`), nên thả cửa thì
+    // `cuốic` thành `cu ố ic`. Nhưng cấm hẳn thì mất `ngồi ở` — mà `ngồi ở`
+    // không phải mục từ điển nên luật "chỉ khi là từ ghép" cũng không cứu nổi.
+    // Chia làm đôi thì hiếm khi băm vụn; băm vụn là chuyện của ba mảnh trở lên.
+    ra.retain(|p| p.len() == 2 || p.iter().all(|m| m.chars().count() >= 2) || co_tu_ghep(&p.join(" ")));
+
+    // Bỏ cách chia nào có **nguyên âm lặp ngay chỗ ngắt**.
+    //
+    // Hai nguyên âm cùng một chữ nền nằm hai bên chỗ ngắt thì đó không phải hai
+    // tiếng dính nhau, mà là **một nguyên âm bị gõ hai lần** trong cùng một
+    // tiếng: `Ngooại` là `ngoại` thừa chữ o, `tứước` là `tước` thừa chữ ư,
+    // `nòoài` và `niêuu` cũng vậy. Tách ra thì được hai chữ đều có trong từ
+    // điển mà câu thành vô nghĩa.
+    //
+    // Luật này thay cho luật cũ "mảnh sau phải mở đầu bằng phụ âm" ở vai trò
+    // chặn: luật cũ chặn đúng những ca ấy nhưng chặn oan cả `ngồi ở`. Nó vẫn
+    // được giữ, nhưng chỉ còn để **xếp hạng** — xem [`tach_manh`].
     ra.retain(|p| {
-        p.iter().all(|m| m.chars().count() >= 2) || co_tu_ghep(&p.join(" "))
+        p.windows(2).all(|w| {
+            let cuoi = w[0].chars().next_back().map(|c| crate::am_tiet::bo_thanh(c).0);
+            let dau = w[1].chars().next().map(|c| crate::am_tiet::bo_thanh(c).0);
+            match (cuoi, dau) {
+                (Some(a), Some(b)) => {
+                    !(a == b && crate::am_tiet::la_nguyen_am(a))
+                }
+                _ => true,
+            }
+        })
     });
 
     // **Cách chia dựng được nguyên một từ ghép đứng trước hết.** Đó là bằng
     // chứng mạnh nhất có thể có cho một chỗ dính: không chữ nào sai, và cái
     // ghép lại được là một từ có sẵn trong từ điển.
     //
-    // Sau đó mới tới ít mảnh, rồi tới số cặp liền nhau dựng được từ ghép.
+    // Rồi tới cách chia "mạnh" (xem [`tach_manh`]), rồi ít mảnh, rồi số cặp
+    // liền nhau dựng được từ ghép.
     ra.sort_by_key(|p| {
-        let day_du = !co_tu_ghep(&p.join(" "));
+        let cum = p.join(" ");
+        let day_du = !co_tu_ghep(&cum);
+        let yeu = !tach_manh(&cum);
         let cap = p.windows(2).filter(|w| co_tu_ghep(&format!("{} {}", w[0], w[1]))).count();
-        (day_du, p.len(), std::cmp::Reverse(cap))
+        (day_du, yeu, p.len(), std::cmp::Reverse(cap))
     });
     ra.into_iter().map(|p| p.join(" ")).collect()
+}
+
+/// Cách chia này có **mạnh** không: mọi mảnh từ thứ hai trở đi mở đầu bằng phụ âm.
+///
+/// Suy từ số liệu chứ không từ suy đoán. Đo trên một bộ truyện dài, mọi cách
+/// tách **đúng** đều thế — `phú lần`, `nó không`, `các vị`, `mực Minh` — còn mọi
+/// cách tách **sai** đều có mảnh mở đầu bằng nguyên âm: `phả ii`, `hu oàng`,
+/// `khuy ếch`, `ngo oại`, `hi ệnh`. Chỗ ấy không phải hai tiếng dính nhau mà là
+/// một nguyên âm bị gõ lặp: `Huoàng` là `Hoàng` thừa chữ u.
+///
+/// Nhưng nó **không phải luật cấm**, vì tiếng Việt có tiếng mở đầu bằng nguyên
+/// âm và chúng dính vào nhau thật: `ngồiở` → `ngồi ở`. Nên cách chia yếu vẫn
+/// được sinh ra, chỉ là không tự áp — nó phải qua tầng chấm điểm.
+pub fn tach_manh(cach_chia: &str) -> bool {
+    cach_chia
+        .split(' ')
+        .skip(1)
+        .all(|m| m.chars().next().is_some_and(|c| !crate::am_tiet::la_nguyen_am(c)))
 }
 
 fn chia(ky_tu: &[char], tu: usize, dang: &mut Vec<String>, ra: &mut Vec<Vec<String>>) {
@@ -180,14 +245,10 @@ fn chia(ky_tu: &[char], tu: usize, dang: &mut Vec<String>, ra: &mut Vec<Vec<Stri
     // Cái giá: tiếng Việt có tiếng mở đầu bằng nguyên âm (`ăn`, `uống`, `ông`)
     // nên `cơmăn` không tách được. Chấp nhận — ca ấy vốn cũng nhập nhằng với
     // `cơ măn`, mà đoán sai thì tệ hơn bỏ sót.
-    let dau_manh_phai_la_phu_am = !dang.is_empty();
-    // Mảnh một chữ vẫn được sinh ra ở đây; [`tach_dinh`] lọc lại, vì chỉ ở đó
-    // mới biết cả cách chia có phải một từ ghép có thật hay không.
+    // Mảnh một chữ và mảnh mở đầu bằng nguyên âm vẫn được sinh ra ở đây;
+    // [`tach_dinh`] mới lọc và xếp hạng, vì chỉ ở đó mới nhìn được cả cách chia.
     for het in tu + 1..=ky_tu.len() {
         let manh: String = ky_tu[tu..het].iter().collect();
-        if dau_manh_phai_la_phu_am && crate::am_tiet::la_nguyen_am(ky_tu[tu]) {
-            break; // ký tự đầu mảnh không đổi theo `het`, nên hỏng là hỏng cả
-        }
         // Mảnh không có nguyên âm thì không phải tiếng. Chặn ở đây rẻ hơn tra
         // từ điển, và nó là lưới bắt phần lớn ca hỏng: `việc` + `c`.
         if !manh.chars().any(crate::am_tiet::la_nguyen_am) {
@@ -268,6 +329,27 @@ mod kiem {
         // `cuối c`, `trốngm` thành `trống m` — đổi một lỗi lấy một lỗi tệ hơn,
         // vì nó thêm hẳn một "chữ" vào câu.
         for t in ["việcc", "cuốic", "trốngm", "trụcc", "khôngg", "bứac"] {
+            assert!(tach_dinh(t).is_empty(), "`{t}` không được tách: {:?}", tach_dinh(t));
+        }
+    }
+
+    #[test]
+    fn tach_duoc_khi_manh_sau_mo_dau_bang_nguyen_am() {
+        // `ngồiở` → `ngồi ở`. Mảnh sau mở đầu bằng nguyên âm nên đây là cách
+        // chia "yếu", nhưng nó vẫn phải được sinh ra — luật "mảnh sau phải mở
+        // đầu bằng phụ âm" chỉ dùng để xếp hạng, không phải để cấm.
+        assert!(tach_dinh("ngồiở").contains(&"ngồi ở".to_string()), "{:?}", tach_dinh("ngồiở"));
+        assert!(!tach_manh("ngồi ở"));
+        assert!(tach_manh("phú lần"));
+    }
+
+    #[test]
+    fn khong_tach_khi_nguyen_am_lap_qua_cho_ngat() {
+        // Hai nguyên âm cùng chữ nền nằm hai bên chỗ ngắt thì đó không phải hai
+        // tiếng dính nhau, mà là một nguyên âm bị gõ hai lần trong cùng một
+        // tiếng: `Ngooại` là `ngoại` thừa chữ o, `tứước` là `tước` thừa chữ ư.
+        // Tách ra thì được hai chữ đều có trong từ điển mà câu thành vô nghĩa.
+        for t in ["ngooại", "tứước", "nòoài", "niêuu"] {
             assert!(tach_dinh(t).is_empty(), "`{t}` không được tách: {:?}", tach_dinh(t));
         }
     }

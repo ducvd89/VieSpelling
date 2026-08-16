@@ -49,7 +49,9 @@ pub struct KetQua {
 /// Máy chấm điểm câu. Cài đặt thật nằm ở crate `mohinh`; để ở đây dạng trait
 /// nên lõi chính tả không phụ thuộc vào llama.cpp và chạy test không cần mô hình.
 pub trait ChamDiem {
-    /// Log-xác suất trung bình mỗi token của câu. **Càng cao càng tự nhiên.**
+    /// Điểm tự nhiên của câu — **càng cao càng tự nhiên**. Chỉ dùng để **so**
+    /// các câu gần giống hệt nhau, nên thang đo tuyệt đối không quan trọng, miễn
+    /// nó nhất quán giữa các lần gọi.
     fn cham(&self, cau: &str) -> f32;
 }
 
@@ -66,12 +68,16 @@ pub struct TuyChon {
     /// (tiếng Việt thiếu dấu) với `window` (tiếng Anh) nếu chỉ nhìn một tiếng,
     /// mà sách dịch thì đầy tên riêng nước ngoài.
     pub chu_khong_dau: bool,
-    /// Mô hình phải chấm cách sửa hơn bản gốc bao nhiêu thì mới đổi.
+    /// Mô hình phải chấm hơn bao nhiêu thì mới được đổi, tính bằng
+    /// **nats/ký tự**.
     ///
-    /// Đây là **cái van an toàn của cả ứng dụng**. Ứng dụng tự sửa rồi mới báo
-    /// cáo, nên với những chỗ mơ hồ, "mô hình thấy hơi khá hơn" là chưa đủ —
-    /// hơn sít sao thì phần lớn là nhiễu. Mức 0,15 nats/token đo trên vài mô
-    /// hình nhỏ là chỗ mà cách sửa đúng tách hẳn khỏi cách sửa đoán mò.
+    /// Đây là **cái van an toàn của cả ứng dụng**, và nó chặn hai chỗ: cách sửa
+    /// phải hơn bản gốc quá mức này, **và** nếu mô hình muốn lật ngược thứ tự
+    /// mà tầng luật đã xếp thì cũng phải hơn quá mức này.
+    ///
+    /// Đơn vị là mỗi **ký tự** chứ không phải mỗi token — xem
+    /// `mohinh::MoHinh::cham_that` về lý do. Nên con số nhỏ hơn hẳn mức quen
+    /// thuộc: một token tiếng Việt cỡ bốn năm ký tự.
     pub nguong_mo_hinh: f32,
 }
 
@@ -83,7 +89,7 @@ impl Default for TuyChon {
             am_tiet_sai: true,
             de_nham: true,
             chu_khong_dau: false,
-            nguong_mo_hinh: 0.15,
+            nguong_mo_hinh: 0.03,
         }
     }
 }
@@ -222,42 +228,61 @@ impl BoSoat {
             // sửa như một tiếng (`phảii`, `Huoàng`, `khuyếch`). Từng thử chặn
             // bằng "sửa được thành một tiếng thì đừng tách", nhưng luật ấy loại
             // nhầm cả ca đúng: `Phúlần` xoá chữ `l` ra `Phuần`, một tiếng hợp lệ.
-            let tach_duoc = tu_dien::tach_dinh(t.chu);
-            if !tach_duoc.is_empty() {
-                let ung_vien: Vec<String> =
-                    tach_duoc.iter().map(|x| chen_khoang_trang(t.chu, x)).collect();
+            let tach_duoc: Vec<String> =
+                tu_dien::tach_dinh(t.chu).iter().map(|x| chen_khoang_trang(t.chu, x)).collect();
+
+            // Cách tách **dứt khoát** thì áp ngay, không hỏi ai. Cần cả hai vế:
+            // cách chia mạnh (mảnh sau mở đầu bằng phụ âm), và hoặc là duy nhất
+            // hoặc là dựng lại nguyên một từ ghép có thật (`erằng` → `e rằng`).
+            let chac = tach_duoc.first().is_some_and(|top| {
+                let thap = top.to_lowercase();
+                tu_dien::tach_manh(&thap) && (tach_duoc.len() == 1 || tu_dien::co_tu_ghep(&thap))
+            });
+            if chac {
                 ra.push(ChoXet {
                     pham_vi: t.dau..t.cuoi,
                     goc: t.chu.to_string(),
-                    ly_do: format!("`{}` là hai tiếng dính liền — `{}`", t.chu, ung_vien[0]),
-                    ung_vien,
+                    ly_do: format!("`{}` là hai tiếng dính liền — `{}`", t.chu, tach_duoc[0]),
+                    ung_vien: tach_duoc,
                     loai: Loai::DinhChu,
-                    // Dứt khoát trong hai ca: chỉ có **một** cách chia, hoặc
-                    // cách chia đầu bảng dựng lại nguyên một **từ ghép có
-                    // thật** — `erằng` ra `e rằng`, vốn là một mục trong từ
-                    // điển. Ca sau là bằng chứng mạnh nhất mà bộ dò có được:
-                    // không chữ nào sai, và cái ghép lại được có sẵn trong từ
-                    // điển.
-                    chac_nho_tu_ghep: tach_duoc.len() == 1
-                        || tu_dien::co_tu_ghep(&tach_duoc[0].to_lowercase()),
+                    chac_nho_tu_ghep: true,
                 });
                 continue;
             }
 
-            let (uv, dut_khoat) = xep_hang_ung_vien(uv_tho, truoc, sau);
-            if uv.is_empty() {
+            // Chưa dứt khoát thì xếp **cách tách và cách sửa chữ chung một
+            // bảng**, rồi để bằng chứng từ ghép phân định trên cả hai loại.
+            //
+            // Xếp hai bảng rời rồi nối lại là sai, và đã sai thật: hễ có một
+            // cách tách cạnh tranh là bằng chứng từ ghép bị tắt, nên `Huoàng`
+            // (có cách tách vô hại `hu oàng`) không được dùng tới `hoàng tử`
+            // trong từ điển, và mô hình tự quyết ra `Hoang` — mất dấu thanh.
+            let co_tach = !tach_duoc.is_empty();
+            let so_dau = t
+                .chu
+                .chars()
+                .filter(|&c| am_tiet::bo_thanh(c).1 != am_tiet::NGANG)
+                .count();
+            let (ung_vien, dut_khoat) =
+                xep_hang_ung_vien(uv_tho, tach_duoc, so_dau, truoc, sau);
+            if ung_vien.is_empty() {
                 continue;
             }
             let ly_do = if dut_khoat {
-                format!("`{}` không có trong từ điển; `{}` ghép với chữ bên cạnh thành từ có thật", t.chu, uv[0])
+                format!(
+                    "`{}` không có trong từ điển; `{}` ghép với chữ bên cạnh thành từ có thật",
+                    t.chu, ung_vien[0]
+                )
+            } else if co_tach {
+                format!("`{}` có thể là chữ dính, cũng có thể là lỗi gõ", t.chu)
             } else {
                 format!("`{}` không có trong từ điển và sai cấu tạo", t.chu)
             };
             ra.push(ChoXet {
                 pham_vi: t.dau..t.cuoi,
                 goc: t.chu.to_string(),
-                ung_vien: uv,
-                loai: Loai::AmTietSai,
+                loai: nhan_theo(Loai::AmTietSai, &ung_vien[0]),
+                ung_vien,
                 ly_do,
                 chac_nho_tu_ghep: dut_khoat,
             });
@@ -316,14 +341,42 @@ impl BoSoat {
             let diem_goc = mo_hinh.cham(nen);
 
             let mut tot: Option<(f32, &String)> = None;
-            for uv in cx.ung_vien.iter() {
+            let mut diem_dau_bang = f32::NEG_INFINITY;
+            for (i, uv) in cx.ung_vien.iter().enumerate() {
                 let thu = thay_mot_cho(nen, &trong_cua_so, uv);
                 let d = mo_hinh.cham(&thu);
+                if i == 0 {
+                    diem_dau_bang = d;
+                }
                 if tot.is_none_or(|(dt, _)| d > dt) {
                     tot = Some((d, uv));
                 }
             }
-            let Some((diem, uv)) = tot else { continue };
+            let Some((mut diem, mut uv)) = tot else { continue };
+
+            // **Luật ngôn ngữ là mặc định; mô hình chỉ được lật ngược khi hơn
+            // rõ.** Ứng viên đầu bảng do tầng luật xếp — cấu tạo âm tiết, giá
+            // phép sửa, bằng chứng từ ghép — và nó chỉ nhường khi mô hình chấm
+            // một ứng viên khác hơn hẳn nó, chứ không phải hơn bản gốc.
+            //
+            // So với bản gốc là so với một chuỗi vô nghĩa, nên ứng viên nào
+            // cũng thắng và việc chọn rơi hết vào chênh lệch nhỏ giữa các ứng
+            // viên — tức là vào nhiễu của mô hình. Đo được: `nòoài` xếp `ngoài`
+            // đầu bảng mà mô hình chọn `ngoai`, mất dấu thanh.
+            if !std::ptr::eq(uv, &cx.ung_vien[0])
+                && diem - diem_dau_bang <= self.tuy_chon.nguong_mo_hinh
+            {
+                ghi(
+                    false,
+                    format!(
+                        "giữ thứ tự của luật: `{}` (mô hình nghiêng về `{uv}`, chỉ hơn {:+.3})",
+                        cx.ung_vien[0],
+                        diem - diem_dau_bang
+                    ),
+                );
+                uv = &cx.ung_vien[0];
+                diem = diem_dau_bang;
+            }
             let hon = diem - diem_goc;
             if hon <= self.tuy_chon.nguong_mo_hinh {
                 ghi(
@@ -340,7 +393,10 @@ impl BoSoat {
                 cx.pham_vi.clone(),
                 cx.goc.clone(),
                 uv.clone(),
-                cx.loai,
+                // Nhãn theo **cách sửa được chọn**, không theo phỏng đoán lúc
+                // dò: một chỗ ngờ có thể mang cả ứng viên tách chữ lẫn ứng viên
+                // sửa chữ, và người đọc báo cáo cần biết cái nào đã thắng.
+                nhan_theo(cx.loai, uv),
                 DoChac::NgoVuc,
                 format!("{} — mô hình chấm hơn {hon:+.2}", cx.ly_do),
             ));
@@ -440,18 +496,43 @@ fn cau_chua(chu: &str, r: &Range<usize>) -> Range<usize> {
 /// Nên bằng chứng từ ghép đặt **trước** mô hình, không phải sau.
 fn xep_hang_ung_vien(
     mut uv: Vec<ung_vien::UngVien>,
+    tach: Vec<String>,
+    so_dau_thanh: usize,
     truoc: Option<&str>,
     sau: Option<&str>,
 ) -> (Vec<String>, bool) {
+    // Giá của một cách tách.
+    //
+    // **Rẻ nhất** khi nó đáng tin: nó không đổi một ký tự nào, chỉ thêm khoảng
+    // trắng, nên gần bản gốc hơn mọi phép sửa chữ (phép rẻ nhất trong số ấy là
+    // đảo hai chữ, giá 4).
+    const GIA_TACH: u32 = 3;
+    // **Đắt hơn mọi phép sửa chữ** khi nó đáng ngờ. Cách tách yếu — mảnh sau mở
+    // đầu bằng nguyên âm — mà đem cho giá rẻ thì `phảii` cho ra `phả ii` đứng
+    // trên `phải`, vì từ điển có cả mục `ii`.
+    const GIA_TACH_YEU: u32 = 9;
+
+    uv.extend(tach.into_iter().map(|chu| {
+        let thap = chu.to_lowercase();
+        // Cách tách yếu vẫn được coi là đáng tin khi chuỗi gốc mang **từ hai
+        // dấu thanh trở lên**: một âm tiết tiếng Việt chỉ mang được một dấu
+        // thanh, nên chuỗi ấy chắc chắn không phải một tiếng và phải tách.
+        //
+        // Đây là chỗ phân `ngồiở` (hai dấu → `ngồi ở`) với `phảii` (một dấu →
+        // `phải`). Cả hai đều có mảnh sau mở đầu bằng nguyên âm.
+        let dang_tin = tu_dien::tach_manh(&thap) || so_dau_thanh > 1;
+        let gia = if dang_tin { GIA_TACH } else { GIA_TACH_YEU };
+        ung_vien::UngVien { chu, gia }
+    }));
     if uv.is_empty() {
         return (Vec::new(), false);
     }
     // Ứng viên không có trong từ điển thì bỏ hẳn: sửa một chữ không tồn tại
     // thành một chữ khác cũng không tồn tại là đổi lỗi này lấy lỗi kia. Nhưng
     // chỉ bỏ khi còn lại thứ gì đó — từ điển không phủ hết tên riêng.
-    let co_trong_tu_dien = uv.iter().any(|u| tu_dien::co_am_tiet(&u.chu));
+    let co_trong_tu_dien = uv.iter().any(|u| tu_dien::ung_vien_co_that(&u.chu));
     if co_trong_tu_dien {
-        uv.retain(|u| tu_dien::co_am_tiet(&u.chu));
+        uv.retain(|u| tu_dien::ung_vien_co_that(&u.chu));
     }
     let khop: Vec<usize> =
         uv.iter().map(|u| tu_dien::khop_hang_xom(truoc, &u.chu, sau)).collect();
@@ -565,6 +646,18 @@ fn chen_khoang_trang(goc: &str, cach_chia: &str) -> String {
         return cach_chia.to_string();
     }
     ra
+}
+
+/// Nhãn loại lỗi suy từ cách sửa đã chọn: có khoảng trắng nghĩa là đã tách chữ.
+fn nhan_theo(loai: Loai, da_chon: &str) -> Loai {
+    if !matches!(loai, Loai::DinhChu | Loai::AmTietSai) {
+        return loai;
+    }
+    if da_chon.contains(' ') {
+        Loai::DinhChu
+    } else {
+        Loai::AmTietSai
+    }
 }
 
 fn thay_mot_cho(goc: &str, r: &Range<usize>, moi: &str) -> String {

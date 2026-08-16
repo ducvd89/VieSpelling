@@ -94,6 +94,19 @@ pub fn sinh(tieng: &str) -> Vec<UngVien> {
         }
     }
 
+    // Phụ thu cho ứng viên **đổi số chữ** so với bản gốc.
+    //
+    // Cùng một giá thì cách nào giữ nguyên số chữ người ta gõ là cách gần bản
+    // gốc hơn. Không có phụ thu này thì `đing` cho `đin` (xoá `g`) và `đinh`
+    // (đổi `g` thành `h`) hoà nhau, rồi `đin` thắng vì ngắn hơn nên đứng trước
+    // trong bảng chữ cái.
+    let so_chu_goc = thap.chars().count();
+    for u in ra.iter_mut() {
+        if u.chu.chars().count() != so_chu_goc {
+            u.gia += 1;
+        }
+    }
+
     ra.sort_by(|a, b| a.gia.cmp(&b.gia).then_with(|| a.chu.cmp(&b.chu)));
     ra.dedup_by(|a, b| a.chu == b.chu);
     ra.retain(|u| u.chu != thap);

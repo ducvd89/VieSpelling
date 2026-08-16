@@ -216,13 +216,20 @@ impl MoHinh {
         format!("{ten} ({ty:.2} tỷ tham số)")
     }
 
-    /// Log-xác suất trung bình mỗi token.
+    /// Log-xác suất của câu, **chia cho số ký tự**.
     ///
-    /// Chia cho số token chứ không lấy tổng: các ứng viên có thể tách ra số
-    /// token khác nhau (`thương` là một token, `thuơng` có khi ba), và tổng
-    /// log-xác suất thì luôn thiên vị chuỗi ít token hơn — tức là thiên vị
-    /// đúng cái từ mà mô hình quen mặt, bất kể ngữ cảnh. Chia trung bình bỏ
-    /// được phần thiên vị ấy.
+    /// Phải chia cho cái gì đó: lấy tổng thì chuỗi dài luôn thua chuỗi ngắn,
+    /// tức là mọi phép xoá chữ đều được thưởng.
+    ///
+    /// Nhưng chia cho **số token** thì hỏng theo kiểu khó thấy: các ứng viên
+    /// tách ra số token khác nhau, và thêm một token dễ đoán có thể **nâng**
+    /// điểm trung bình lên. Đo được: mô hình chấm `Hắn phảii đi ngay.` cao hơn
+    /// `Hắn phải đi ngay.` 0,167 — câu sai thắng câu đúng, vì `phảii` tách thành
+    /// `phải` + `i` và cái đuôi `i` ấy không đắt bằng mức nó kéo mẫu số lên.
+    ///
+    /// Số ký tự thì không phụ thuộc vào cách tách token, mà các ứng viên ở đây
+    /// chỉ chênh nhau một hai ký tự nên mẫu số gần như không đổi — đúng cái ta
+    /// cần khi so hai câu gần giống hệt nhau.
     fn cham_that(&self, cau: &str) -> Result<f32> {
         // `AddBos::Always` đọc dễ nhầm: nó **không** ép thêm BOS, nó bật cờ
         // `add_special` của llama.cpp, tức là "thêm token đặc biệt theo đúng
@@ -264,7 +271,8 @@ impl MoHinh {
             tong += log_xac_suat(logits, token[i].0 as usize);
         }
         self.so_luot.set(self.so_luot.get() + 1);
-        Ok(tong / (n - 1) as f32)
+        let so_ky_tu = cau.chars().count().max(1) as f32;
+        Ok(tong / so_ky_tu)
     }
 }
 

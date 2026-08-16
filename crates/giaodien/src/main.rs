@@ -477,7 +477,7 @@ impl UngDung {
                 self.chon_mo_hinh(ui);
                 if self.cai_dat.mo_hinh.is_some() {
                     ui.add(
-                        egui::Slider::new(&mut self.cai_dat.nguong_mo_hinh, 0.0..=0.6)
+                        egui::Slider::new(&mut self.cai_dat.nguong_mo_hinh, 0.0..=0.15)
                             .text("ngưỡng tin mô hình"),
                     );
                     ui.label(
