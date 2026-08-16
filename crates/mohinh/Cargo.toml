@@ -1,0 +1,25 @@
+[package]
+name = "mohinh"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Chấm điểm câu bằng mô hình ngôn ngữ chạy trên máy"
+
+[dependencies]
+anyhow.workspace = true
+chinhta = { path = "../chinhta" }
+
+# Cùng bản mà dự án Sách lười đang dùng trên máy này, nên llama.cpp đã dựng
+# được với đúng bộ cmake + LIBCLANG_PATH sẵn có.
+llama-cpp-2 = "0.1.154"
+
+[features]
+# CUDA **bật mặc định**. Việc ở đây là hàng nghìn lượt chấm câu cho một cuốn
+# sách, và đó đúng là loại việc mà card đồ hoạ ăn đứt CPU.
+#
+# Dựng có CUDA thì cần `nvcc` (CUDA Toolkit ≥ 12.8 cho card Blackwell). Máy
+# không có thì dựng bằng `--no-default-features` — chương trình chạy y hệt, chỉ
+# chậm hơn. Bản dựng có CUDA mà chạy trên máy không card cũng **tự lùi về CPU**
+# chứ không lỗi.
+default = ["cuda"]
+cuda = ["llama-cpp-2/cuda"]

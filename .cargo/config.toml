@@ -1,0 +1,8 @@
+# Trỏ cmake vào file toolchain ghim kiến trúc CUDA. Xem `cuda-arch.cmake` về
+# lý do — tóm tắt: không có nó thì mỗi lần dựng lại llama.cpp mất hàng chục phút
+# để sinh mã cho sáu đời card mà máy này không có.
+#
+# `relative = true` tính từ thư mục chứa file config này, nên repo chép đi đâu
+# cũng chạy.
+[env]
+CMAKE_TOOLCHAIN_FILE = { value = "cuda-arch.cmake", relative = true }

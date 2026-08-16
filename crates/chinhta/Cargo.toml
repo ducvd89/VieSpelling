@@ -1,0 +1,11 @@
+[package]
+name = "chinhta"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Lõi dò và sửa lỗi chính tả tiếng Việt"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+unicode-normalization.workspace = true

@@ -1,0 +1,39 @@
+[package]
+name = "giaodien"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Ứng dụng kiểm và sửa chính tả EPUB tiếng Việt"
+
+[lib]
+name = "ungdung"
+path = "src/lib.rs"
+
+# Ứng dụng có cửa sổ. `windows_subsystem` trong main.rs chặn cửa sổ dòng lệnh
+# đen hiện kèm trên Windows.
+[[bin]]
+name = "vie-spellcheck"
+path = "src/main.rs"
+
+# Bản dòng lệnh — dùng để đo và để chạy hàng loạt. Cùng lõi với bản có cửa sổ,
+# nên chạy nó là kiểm được đúng cái mà cửa sổ sẽ làm.
+[[bin]]
+name = "vsc"
+path = "src/cli.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chinhta = { path = "../chinhta" }
+sach = { path = "../sach" }
+mohinh = { path = "../mohinh" }
+
+eframe = { version = "0.32", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui = "0.32"
+rfd = "0.15"
+unicode-normalization.workspace = true
+
+[dev-dependencies]
+zip.workspace = true
+ab_glyph = "0.2"

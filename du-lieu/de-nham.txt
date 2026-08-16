@@ -1,0 +1,91 @@
+# Cặp dễ nhầm trong tiếng Việt.
+#
+# Hai phần, và ranh giới giữa chúng là điều quan trọng nhất của file này.
+#
+# [LUON_SAI]  Dạng bên trái không phải là từ — không có nghĩa nào, không dùng
+#             được ở đâu. Sửa thẳng, không cần ngữ cảnh.
+# [TUY_NGHIA] Cả hai dạng đều là từ có thật, chỉ khác nghĩa. Chọn sai là sai,
+#             mà chọn đúng thì phải hiểu câu. Những mục này KHÔNG tự sửa —
+#             chúng đi qua tầng mô hình ngôn ngữ, và chỉ đổi khi mô hình chấm
+#             cách sửa hơn hẳn bản gốc.
+#
+# Đừng đẩy mục nào từ TUY_NGHIA lên LUON_SAI cho tiện. `dành` và `giành` đều là
+# từ thật; sửa thẳng thì "để dành tiền" thành "để giành tiền" trong nửa số lần.
+
+[LUON_SAI]
+# --- Lẫn s/x ---
+xử dụng => sử dụng
+sử lý => xử lý
+sử sự => xử sự
+xúc tích => súc tích
+sơ xài => sơ sài
+sơ xuất => sơ suất
+suất sắc => xuất sắc
+sáng lạn => xán lạn
+sáng lạng => xán lạn
+xán lạng => xán lạn
+đường xá => đường sá
+cọ sát => cọ xát
+xoay sở => xoay xở
+
+# --- Lẫn ch/tr ---
+câu truyện => câu chuyện
+truyện trò => chuyện trò
+chuyện ngắn => truyện ngắn
+chân trọng => trân trọng
+trân thành => chân thành
+bắt trước => bắt chước
+nhất chí => nhất trí
+khúc triết => khúc chiết
+trau truốt => trau chuốt
+chau dồi => trau dồi
+tựu chung => tựu trung
+vô hình chung => vô hình trung
+vô hình dung => vô hình trung
+chăn trở => trăn trở
+chải nghiệm => trải nghiệm
+
+# --- Lẫn d/gi/r ---
+dấu diếm => giấu giếm
+dấu giếm => giấu giếm
+che dấu => che giấu
+dành giật => giành giật
+giành dụm => dành dụm
+để giành => để dành
+
+# --- Lẫn âm cuối n/ng, và vần gần nhau ---
+lãng mạng => lãng mạn
+thái độ bàng quang => thái độ bàng quan
+chuẩn đoán => chẩn đoán
+sát nhập => sáp nhập
+thăm quan => tham quan
+chín mùi => chín muồi
+điểm xuyến => điểm xuyết
+vãng cảnh => vãn cảnh
+nhận chức => nhậm chức
+chỉnh chu => chỉn chu
+buôn chải => bươn chải
+bươn trải => bươn chải
+kết cuộc => kết cục
+sửa chửa => sửa chữa
+xuất xắc => xuất sắc
+tựu chung lại => tựu trung lại
+bảng lĩnh => bản lĩnh
+
+[TUY_NGHIA]
+# `chia sẻ` là san sẻ; `chia xẻ` là cắt rời ra. Phần lớn ngữ cảnh cần `sẻ`,
+# nhưng không phải mọi ngữ cảnh.
+chia xẻ | chia sẻ
+# `dành` là để riêng ra; `giành` là tranh lấy.
+dành cho | giành cho
+dành lấy | giành lấy
+dành chiến thắng | giành chiến thắng
+dành được | giành được
+# `giả thiết` là điều nêu ra để lập luận; `giả thuyết` là điều nêu ra để kiểm chứng.
+giả thiết | giả thuyết
+# `yếu điểm` là điểm quan trọng; `điểm yếu` là chỗ kém.
+yếu điểm | điểm yếu
+# `phong thanh` là nghe loáng thoáng; `phong phanh` là mặc mỏng.
+phong thanh | phong phanh
+# `nền nếp` và `nề nếp` đều được công nhận, nhưng nên nhất quán trong một sách.
+nề nếp | nền nếp
