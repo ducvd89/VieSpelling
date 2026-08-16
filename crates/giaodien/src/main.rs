@@ -90,6 +90,12 @@ const TRAN_NHAT_KY: usize = 20_000;
 struct UngDung {
     cai_dat: CaiDat,
     sach: Option<PathBuf>,
+    /// Chỗ lưu do người dùng chọn. `None` thì dùng tên gợi ý bên cạnh bản gốc.
+    ///
+    /// Giữ riêng chứ không nhét vào [`CaiDat`]: đây là lựa chọn cho **một cuốn
+    /// sách**, không phải thói quen. Lưu xuống đĩa rồi mở lại thì cuốn sau bị
+    /// ghi đè lên kết quả của cuốn trước.
+    noi_luu: Option<PathBuf>,
     ty_le: f32,
     mo_ta: String,
     dang_chay: bool,
@@ -113,6 +119,7 @@ impl UngDung {
             mo_hinh_co_san: tim_mo_hinh(cai_dat.mo_hinh.as_deref()),
             cai_dat,
             sach: None,
+            noi_luu: None,
             ty_le: 0.0,
             mo_ta: String::new(),
             dang_chay: false,
@@ -128,9 +135,23 @@ impl UngDung {
         }
     }
 
+    /// Chỗ sẽ ghi kết quả: người dùng chọn, hoặc tên gợi ý cạnh bản gốc.
+    fn dich(&self) -> Option<PathBuf> {
+        let vao = self.sach.as_ref()?;
+        Some(self.noi_luu.clone().unwrap_or_else(|| xu_ly::ten_ra(vao)))
+    }
+
     fn bat_dau(&mut self) {
         let Some(vao) = self.sach.clone() else { return };
-        let ra = xu_ly::ten_ra(&vao);
+        let Some(ra) = self.dich() else { return };
+        // Chặn cuối cùng trước khi ghi. Người dùng bấm "Lưu thành…" rồi chọn
+        // đúng file đang mở là mất bản gốc — thứ duy nhất có để đối chiếu nếu
+        // bộ sửa làm sai. Nút đã bị khoá ở giao diện, nhưng chặn cả ở đây vì
+        // đây mới là chỗ ghi thật.
+        if ra == vao {
+            self.loi = Some("Chỗ lưu trùng file gốc. Bản gốc phải giữ nguyên.".into());
+            return;
+        }
         let tuy_chon = self.cai_dat.thanh_tuy_chon();
         let duong_mo_hinh = self.cai_dat.mo_hinh.clone();
         let viet_bao_cao = self.cai_dat.viet_bao_cao;
@@ -322,6 +343,7 @@ impl UngDung {
             if let Some(p) = i.raw.dropped_files.first().and_then(|f| f.path.clone()) {
                 if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("epub")) {
                     self.sach = Some(p);
+                    self.noi_luu = None;
                     self.ket_qua = None;
                     self.loi = None;
                 }
@@ -338,6 +360,9 @@ impl UngDung {
                         rfd::FileDialog::new().add_filter("Sách EPUB", &["epub"]).pick_file()
                     {
                         self.sach = Some(p);
+                        // Đổi sách thì bỏ chỗ lưu cũ — không thì cuốn mới ghi
+                        // đè lên kết quả của cuốn trước.
+                        self.noi_luu = None;
                         self.ket_qua = None;
                         self.loi = None;
                     }
@@ -352,6 +377,36 @@ impl UngDung {
                     None => {
                         ui.label(egui::RichText::new("hoặc kéo file thả vào đây").weak());
                     }
+                }
+            });
+
+            if self.sach.is_none() {
+                return;
+            }
+            ui.horizontal(|ui| {
+                if ui.add_enabled(!self.dang_chay, egui::Button::new("Lưu thành…")).clicked() {
+                    let goi_y = self.dich().unwrap_or_default();
+                    let hop = rfd::FileDialog::new()
+                        .add_filter("Sách EPUB", &["epub"])
+                        .set_file_name(goi_y.file_name().unwrap_or_default().to_string_lossy())
+                        .set_directory(goi_y.parent().unwrap_or(Path::new(".")));
+                    if let Some(p) = hop.save_file() {
+                        if Some(&p) == self.sach.as_ref() {
+                            self.loi =
+                                Some("Chỗ lưu trùng file gốc. Bản gốc phải giữ nguyên.".into());
+                        } else {
+                            self.noi_luu = Some(p);
+                            self.loi = None;
+                        }
+                    }
+                }
+                if let Some(d) = self.dich() {
+                    ui.label(egui::RichText::new(d.to_string_lossy()).weak());
+                }
+                if self.noi_luu.is_some()
+                    && ui.add_enabled(!self.dang_chay, egui::Button::new("mặc định")).clicked()
+                {
+                    self.noi_luu = None;
                 }
             });
         });
@@ -398,7 +453,7 @@ impl UngDung {
                 if cd.chu_khong_dau {
                     ui.label(
                         egui::RichText::new(
-                            "  ⚠ Chữ không dấu không phân được với từ tiếng Anh — sách dịch \
+                            "  (!) Chữ không dấu không phân được với từ tiếng Anh — sách dịch \
                              nhiều tên riêng nước ngoài thì nên tắt.",
                         )
                         .weak()
@@ -491,11 +546,11 @@ impl UngDung {
                 self.cai_dat.luu();
                 self.bat_dau();
             }
-            if let Some(p) = &self.sach {
+            if let Some(d) = self.dich() {
                 ui.label(
                     egui::RichText::new(format!(
                         "→ {}",
-                        xu_ly::ten_ra(p).file_name().unwrap_or_default().to_string_lossy()
+                        d.file_name().unwrap_or_default().to_string_lossy()
                     ))
                     .weak(),
                 );

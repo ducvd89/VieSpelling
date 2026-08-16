@@ -20,11 +20,27 @@ tốn của người dùng nhiều hơn bỏ sót.
 | Dấu thanh đặt sai nguyên âm | `qúy`→`quý`, `đựơc`→`được`, `chuỵên`→`chuyện` | luôn |
 | Kiểu đặt dấu | `hoà` ⇄ `hòa`, kéo về kiểu đa số của chính cuốn sách | tuỳ chọn |
 | Cặp dễ nhầm, dạng luôn sai | `xử dụng`→`sử dụng`, `che dấu`→`che giấu` | luôn |
-| Tiếng sai cấu tạo | `thuơng`→`thương`, `khôngg`→`không` | cần mô hình |
+| Tiếng sai, hàng xóm quyết được | `chúg ta`→`chúng ta`, `tình thuơng`→`tình thương` | luôn |
+| Tiếng sai, không ai quyết được | `Ừ thuơng à` | cần mô hình |
 | Cặp dễ nhầm, tuỳ nghĩa | `dành`/`giành`, `chia sẻ`/`chia xẻ` | cần mô hình |
 
 Hai dòng cuối cần **hiểu câu** mới phân được. Không có mô hình thì chúng nằm
 nguyên trong mục *chỗ ngờ* của báo cáo chứ không bị đoán bừa.
+
+### Ba tầng xác nhận một tiếng, theo thứ tự
+
+1. **Từ điển** (9.550 âm tiết) — có thì thôi, không xét tiếp.
+2. **Cấu tạo âm tiết** — âm đầu + vần + thanh. Đỡ cho những gì từ điển thiếu.
+3. Trượt cả hai thì mới sinh cách sửa, rồi **từ ghép** (69.893 mục) chọn giữa
+   chúng: `chúg ta` thì `chúng ta` có trong từ điển còn `chừ ta` thì không.
+
+Thứ tự ấy không đảo được. Chỉ dùng bảng vần thì 1.813 từ mượn viết theo âm Việt
+(`bêtông`, `micrô`, `rađa`) bị sửa hỏng. Chỉ dùng từ điển thì mọi chữ lạ hợp lệ
+đều bị bắt. Xem `du-lieu/NGUON.md`.
+
+Bằng chứng từ ghép **đặt trước mô hình ngôn ngữ**, vì nó là sự thật về tiếng
+Việt chứ không phải một ước lượng: đo trên một cuốn sách thì mô hình 9 tỷ tham
+số chọn sai khoảng 40% số ca thuộc loại này, mà từ ghép phân được ngay.
 
 ## Nó cố ý KHÔNG sửa gì
 

@@ -16,6 +16,7 @@ use crate::dau_thanh::{self, Kieu};
 use crate::de_nham;
 use crate::sua::{ap_dung, DoChac, Loai, SuaDoi};
 use crate::tach_tu::{self, DangTu};
+use crate::tu_dien;
 use crate::{am_tiet, ung_vien};
 use std::ops::Range;
 
@@ -29,6 +30,13 @@ pub struct ChoXet {
     pub ung_vien: Vec<String>,
     pub loai: Loai,
     pub ly_do: String,
+    /// Ứng viên đứng đầu là **ứng viên duy nhất** ghép được với hàng xóm thành
+    /// một từ có trong từ điển.
+    ///
+    /// Đây là bằng chứng mạnh hơn mọi điểm số: `chúg ta` thì chỉ `chúng` ghép
+    /// được thành `chúng ta`, và không cần hỏi thêm ai. Bật cờ này thì phép sửa
+    /// tự áp được ngay cả khi không có mô hình ngôn ngữ.
+    pub chac_nho_tu_ghep: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -142,6 +150,7 @@ impl BoSoat {
                     ung_vien: vec![s.thay_bang.clone()],
                     loai: s.loai,
                     ly_do: s.ly_do.clone(),
+                    chac_nho_tu_ghep: false,
                 });
             }
             // Vị trí của phần để dành tính trên `chu` trước khi áp phần chắc.
@@ -160,29 +169,45 @@ impl BoSoat {
         kq
     }
 
-    /// Tìm những tiếng không ghép được từ âm đầu + vần + thanh nào.
+    /// Tìm những tiếng vừa **không có trong từ điển** vừa **sai cấu tạo**.
+    ///
+    /// Phải trượt cả hai phép kiểm mới bị bắt, và thứ tự ấy quan trọng. Từ điển
+    /// đi trước vì nó phủ được thứ mà bảng vần không bao giờ phủ nổi: từ mượn
+    /// viết theo âm Việt (`bêtông`, `micrô`, `pittông`, `rađa`), tên riêng, từ
+    /// địa phương. Bảng vần đi sau để đỡ cho những gì từ điển thiếu.
+    ///
+    /// Chỉ dùng một trong hai là hỏng theo hai kiểu khác nhau: chỉ bảng vần thì
+    /// 1.800 từ mượn bị sửa hỏng; chỉ từ điển thì mọi chữ lạ hợp lệ đều bị bắt.
     fn soat_am_tiet(&self, chu: &str) -> Vec<ChoXet> {
+        let tu = tach_tu::cat(chu);
         let mut ra = Vec::new();
-        for t in tach_tu::cat(chu) {
-            let dang = tach_tu::dang_tu(t.chu);
-            let dang_kiem = match dang {
+        for (i, t) in tu.iter().enumerate() {
+            let dang_kiem = match tach_tu::dang_tu(t.chu) {
                 DangTu::TiengViet => true,
                 DangTu::KhongDau => self.tuy_chon.chu_khong_dau,
                 _ => false,
             };
-            if !dang_kiem || am_tiet::hop_le(t.chu) {
+            if !dang_kiem || tu_dien::co_am_tiet(t.chu) || am_tiet::hop_le(t.chu) {
                 continue;
             }
-            let uv = ung_vien::sinh(t.chu);
+            let truoc = i.checked_sub(1).map(|k| tu[k].chu);
+            let sau = tu.get(i + 1).map(|x| x.chu);
+            let (uv, dut_khoat) = xep_hang_ung_vien(t.chu, truoc, sau);
             if uv.is_empty() {
                 continue;
             }
+            let ly_do = if dut_khoat {
+                format!("`{}` không có trong từ điển; `{}` ghép với chữ bên cạnh thành từ có thật", t.chu, uv[0])
+            } else {
+                format!("`{}` không có trong từ điển và sai cấu tạo", t.chu)
+            };
             ra.push(ChoXet {
                 pham_vi: t.dau..t.cuoi,
                 goc: t.chu.to_string(),
-                ung_vien: uv.into_iter().map(|u| u.chu).collect(),
+                ung_vien: uv,
                 loai: Loai::AmTietSai,
-                ly_do: format!("`{}` không ghép được thành tiếng Việt nào", t.chu),
+                ly_do,
+                chac_nho_tu_ghep: dut_khoat,
             });
         }
         ra
@@ -211,6 +236,23 @@ impl BoSoat {
         let mut chon: Vec<SuaDoi> = Vec::new();
 
         for cx in kq.cho_xet.iter() {
+            // Bằng chứng từ ghép **thắng điểm số**, và bỏ qua luôn lượt chấm.
+            // Từ điển nói `chúng ta` là một từ còn `chừ ta` thì không — đó là
+            // sự thật về tiếng Việt, không phải một ước lượng. Hỏi mô hình ở
+            // đây chỉ tạo cơ hội cho nó phủ quyết sai, mà đo được là nó chọn
+            // sai khoảng 40% số ca thuộc loại này.
+            if cx.chac_nho_tu_ghep {
+                ghi(true, format!("`{}` → `{}` (từ ghép trong từ điển)", cx.goc, cx.ung_vien[0]));
+                chon.push(SuaDoi::moi(
+                    cx.pham_vi.clone(),
+                    cx.goc.clone(),
+                    cx.ung_vien[0].clone(),
+                    cx.loai,
+                    DoChac::KhaChac,
+                    cx.ly_do.clone(),
+                ));
+                continue;
+            }
             // Chấm trên **câu chứa chỗ sửa**, không phải cả đoạn. Hai lý do:
             // mỗi ứng viên là một lượt chạy mô hình nên đoạn dài đắt gấp bội,
             // và điểm trung bình mỗi token của một đoạn dài bị phần không đổi
@@ -264,6 +306,17 @@ impl BoSoat {
         let mut chon: Vec<SuaDoi> = Vec::new();
         let mut con_lai = Vec::new();
         for cx in std::mem::take(&mut kq.cho_xet) {
+            if cx.chac_nho_tu_ghep {
+                chon.push(SuaDoi::moi(
+                    cx.pham_vi.clone(),
+                    cx.goc.clone(),
+                    cx.ung_vien[0].clone(),
+                    cx.loai,
+                    DoChac::KhaChac,
+                    cx.ly_do.clone(),
+                ));
+                continue;
+            }
             if cx.ung_vien.len() == 1 && cx.loai == Loai::AmTietSai {
                 chon.push(SuaDoi::moi(
                     cx.pham_vi.clone(),
@@ -320,6 +373,53 @@ fn cau_chua(chu: &str, r: &Range<usize>) -> Range<usize> {
         }
     }
     dau..cuoi
+}
+
+/// Sinh ứng viên rồi xếp lại theo bằng chứng **từ ghép**.
+///
+/// Phép sinh xếp hạng theo "khác bản gốc ít nhất", tức là theo hình dạng lỗi
+/// gõ. Nhưng hình dạng không phân được những ứng viên cùng giá, mà chuyện ấy
+/// xảy ra liên tục: `chúg` cho ra `chúng`, `chừ`, `chú`, `chug`… đều cách bản
+/// gốc một bước. Ở đó thì hàng xóm quyết định — `chúng ta` có trong từ điển,
+/// `chừ ta` thì không.
+///
+/// Đo trên một cuốn sách: mô hình ngôn ngữ 9 tỷ tham số chọn sai khoảng 40% số
+/// ca thuộc loại này, và phần lớn ca sai đều là ca mà từ ghép phân được ngay.
+/// Nên bằng chứng từ ghép đặt **trước** mô hình, không phải sau.
+fn xep_hang_ung_vien(
+    tieng: &str,
+    truoc: Option<&str>,
+    sau: Option<&str>,
+) -> (Vec<String>, bool) {
+    let mut uv = ung_vien::sinh(tieng);
+    if uv.is_empty() {
+        return (Vec::new(), false);
+    }
+    // Ứng viên không có trong từ điển thì bỏ hẳn: sửa một chữ không tồn tại
+    // thành một chữ khác cũng không tồn tại là đổi lỗi này lấy lỗi kia. Nhưng
+    // chỉ bỏ khi còn lại thứ gì đó — từ điển không phủ hết tên riêng.
+    let co_trong_tu_dien = uv.iter().any(|u| tu_dien::co_am_tiet(&u.chu));
+    if co_trong_tu_dien {
+        uv.retain(|u| tu_dien::co_am_tiet(&u.chu));
+    }
+    let khop: Vec<usize> =
+        uv.iter().map(|u| tu_dien::khop_hang_xom(truoc, &u.chu, sau)).collect();
+    let mut ghep: Vec<(usize, ung_vien::UngVien)> = khop.into_iter().zip(uv).collect();
+    // Khớp hàng xóm là tiêu chí đầu; giá của phép sinh phân định trong nội bộ
+    // từng mức khớp.
+    ghep.sort_by_key(|(k, u)| (std::cmp::Reverse(*k), u.gia));
+
+    // Bằng chứng dứt khoát khi ứng viên đầu bảng **thắng không hoà**: nó ghép
+    // được với hàng xóm, và không ứng viên nào khác cùng mức khớp mà giá bằng.
+    //
+    // Tiêu chí đầu tiên là "đúng một ứng viên ghép được", nhưng nó hỏng ngay khi
+    // phép sinh mạnh lên: `tình thuơng` có tới mấy ứng viên ghép được với
+    // `tình`, mà `thương` vẫn hơn hẳn phần còn lại vì nó chỉ khác bản gốc ở dấu.
+    // Đòi độc nhất thì mất luôn ca dễ nhất.
+    let dut_khoat = ghep.first().is_some_and(|(k, u)| {
+        *k > 0 && ghep.get(1).is_none_or(|(k2, u2)| (*k, u.gia) != (*k2, u2.gia))
+    });
+    (ghep.into_iter().map(|(_, u)| u.chu).collect(), dut_khoat)
 }
 
 fn thay_mot_cho(goc: &str, r: &Range<usize>, moi: &str) -> String {
@@ -440,19 +540,55 @@ mod kiem {
         assert_eq!(kq.chu, "Tình thương của mẹ");
     }
 
+    struct Deu;
+    impl ChamDiem for Deu {
+        fn cham(&self, _: &str) -> f32 {
+            1.0
+        }
+    }
+
     #[test]
     fn mo_hinh_thang_sit_sao_thi_khong_doi() {
         // Mô hình chấm mọi ứng viên bằng nhau — không có bằng chứng gì. Bản gốc
         // phải sống sót. Đây là cái van chặn ứng dụng tự sửa bừa.
-        struct Deu;
-        impl ChamDiem for Deu {
-            fn cham(&self, _: &str) -> f32 {
-                1.0
-            }
-        }
-        let mut kq = bo().soat("Tình thuơng của mẹ");
+        //
+        // Câu phải chọn sao cho **không ứng viên nào ghép được với hàng xóm**,
+        // không thì bằng chứng từ ghép quyết trước và mô hình chẳng được hỏi.
+        let v = "Ừ thuơng à";
+        let mut kq = bo().soat(v);
+        assert!(!kq.cho_xet[0].chac_nho_tu_ghep, "ca này lẽ ra không có bằng chứng từ ghép");
         bo().quyet_bang_mo_hinh(&mut kq, &Deu, &mut |_, _| {});
-        assert_eq!(kq.chu, "Tình thuơng của mẹ");
+        assert_eq!(kq.chu, v);
+    }
+
+    #[test]
+    fn tu_ghep_quyet_truoc_mo_hinh() {
+        // `tình thương` có trong từ điển, `tình thường`/`tình thưởng` thì không.
+        // Bằng chứng ấy dứt khoát nên phải áp được **kể cả khi mô hình phản
+        // đối** — mô hình chấm đều nhau ở đây, tức là nó không có ý kiến gì.
+        let mut kq = bo().soat("Tình thuơng của mẹ");
+        assert!(kq.cho_xet[0].chac_nho_tu_ghep);
+        bo().quyet_bang_mo_hinh(&mut kq, &Deu, &mut |_, _| {});
+        assert_eq!(kq.chu, "Tình thương của mẹ");
+    }
+
+    #[test]
+    fn tu_ghep_sua_duoc_khi_khong_co_mo_hinh() {
+        // Không có card đồ hoạ thì vẫn sửa được lớp lỗi này.
+        let mut kq = bo().soat("Tình thuơng của mẹ");
+        bo().quyet_khong_mo_hinh(&mut kq);
+        assert_eq!(kq.chu, "Tình thương của mẹ");
+    }
+
+    #[test]
+    fn khong_dung_vao_tu_muon_co_trong_tu_dien() {
+        // `bêtông`, `micrô`, `rađa` sai cấu tạo âm tiết nhưng có trong từ điển.
+        // Trước khi có tầng từ điển, cả 1.800 chữ kiểu này bị sửa hỏng.
+        let v = "Cột bêtông và cái micrô cùng cái rađa";
+        let mut kq = bo().soat(v);
+        bo().quyet_khong_mo_hinh(&mut kq);
+        assert_eq!(kq.chu, v);
+        assert!(kq.cho_xet.is_empty(), "{:?}", kq.cho_xet);
     }
 
     #[test]

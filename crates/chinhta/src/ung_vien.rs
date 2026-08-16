@@ -41,7 +41,12 @@ fn cung_nen(c: char) -> &'static [char] {
     }
 }
 
-const MAX_UNG_VIEN: usize = 12;
+/// Trần số ứng viên trả về.
+///
+/// Nới rộng khi thêm phép chèn và phép thay chữ: danh sách thô giờ lớn hơn
+/// nhiều, nhưng tầng trên còn lọc tiếp bằng từ điển rồi mới dùng, nên cắt sớm ở
+/// đây là cắt mất đúng ứng viên mà từ điển sẽ xác nhận.
+const MAX_UNG_VIEN: usize = 40;
 
 /// Sinh các cách sửa cho một tiếng, đã lọc và xếp hạng.
 ///
@@ -140,11 +145,26 @@ fn doi_dau_phu(khung: &str) -> Vec<String> {
     ra.into_iter().map(|v| v.into_iter().collect()).collect()
 }
 
-/// Xoá một chữ, đảo hai chữ liền nhau, hoặc nhân đôi một chữ.
+/// Chữ cái dùng để chèn và thay thế.
 ///
-/// Không chèn chữ tuỳ ý: chèn thì mỗi vị trí 29 khả năng, nhân với độ dài từ ra
-/// hàng trăm ứng viên, mà lỗi thiếu hẳn một chữ cái thì hiếm hơn nhiều so với
-/// thừa chữ (giữ phím) hay đảo chữ (gõ nhanh).
+/// Chỉ chữ cái ASCII cộng `đ`: phần dấu phụ do [`doi_dau_phu`] lo, nên chèn
+/// thẳng `ư` hay `ô` ở đây là làm hai lần một việc.
+const CHU_CAI: [char; 27] = [
+    'a', 'b', 'c', 'd', 'đ', 'e', 'g', 'h', 'i', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+    'u', 'v', 'x', 'y', 'f', 'j', 'w', 'z',
+];
+
+/// Sửa một chữ: xoá, đảo, chèn, hoặc thay.
+///
+/// Bản đầu **không chèn và không thay**, vì mỗi vị trí 27 khả năng thì một tiếng
+/// bốn chữ đẻ ra hơn hai trăm chuỗi. Cái giá của việc bỏ qua ấy đo được trên
+/// sách thật: `chúg` cần chèn `n` để thành `chúng`, `kông` cần chèn `h`,
+/// `khônh` cần thay `h` bằng `g`, `bứac` cần thay `a` bằng `o`. Không sinh ra
+/// thì tầng chọn dưới không có gì đúng để chọn, và nó chọn `chừ`.
+///
+/// Sinh ra được vì mọi ứng viên đều bị lọc hai lần: [`sinh`] bỏ chuỗi không
+/// ghép thành tiếng hợp lệ, rồi tầng trên bỏ tiếp những tiếng không có trong từ
+/// điển. Cái còn lại chỉ vài chục.
 fn sua_mot_chu(khung: &str) -> Vec<String> {
     let ky_tu: Vec<char> = khung.chars().collect();
     let mut ra = Vec::new();
@@ -155,11 +175,28 @@ fn sua_mot_chu(khung: &str) -> Vec<String> {
         if m.len() >= 2 {
             ra.push(m.into_iter().collect());
         }
-        // Đảo chữ i với i+1 — bắt lỗi gõ nhanh: `nhưng` thành `nhưnq`… đúng hơn
-        // là `hoạt` thành `hoäta`.
+        // Đảo chữ i với i+1 — bắt lỗi gõ nhanh: `nhưgn`, `khôgn`, `độgn`.
         if i + 1 < ky_tu.len() {
             let mut m = ky_tu.clone();
             m.swap(i, i + 1);
+            ra.push(m.into_iter().collect());
+        }
+        // Thay chữ thứ i — bắt lỗi trượt phím: `khônh` → `không`.
+        for &c in CHU_CAI.iter() {
+            if c == ky_tu[i] {
+                continue;
+            }
+            let mut m = ky_tu.clone();
+            m[i] = c;
+            ra.push(m.into_iter().collect());
+        }
+    }
+    // Chèn một chữ vào mọi vị trí, kể cả đầu và cuối — bắt lỗi hụt phím:
+    // `chúg` → `chúng`, `kông` → `không`.
+    for i in 0..=ky_tu.len() {
+        for &c in CHU_CAI.iter() {
+            let mut m = ky_tu.clone();
+            m.insert(i, c);
             ra.push(m.into_iter().collect());
         }
     }
@@ -215,7 +252,14 @@ mod kiem {
 
     #[test]
     fn giu_kieu_viet_hoa() {
-        assert!(sinh("Thuơng").iter().all(|u| u.chu.starts_with('T')));
+        // Chữ **đầu** phải hoa. Không đòi nó là chữ cái nào: phép sinh có thay
+        // chữ nên ứng viên đổi cả âm đầu là chuyện bình thường.
+        assert!(sinh("Thuơng")
+            .iter()
+            .all(|u| u.chu.chars().next().is_some_and(|c| c.is_uppercase())));
+        assert!(sinh("thuơng")
+            .iter()
+            .all(|u| u.chu.chars().next().is_some_and(|c| c.is_lowercase())));
     }
 
     #[test]

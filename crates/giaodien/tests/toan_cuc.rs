@@ -41,8 +41,11 @@ fn chuong() -> String {
     s.push_str("<p>Trời mưa , rồi   tạnh.Anh đi ra.</p>\n");
     // Gạch nối mềm vô hình nằm giữa chữ.
     s.push_str("<p>Trời khô\u{00AD}ng mưa nữa.</p>\n");
-    // Tiếng sai cấu tạo, nhiều cách sửa — phải để lại cho người dùng.
+    // Tiếng sai cấu tạo mà hàng xóm quyết được: từ điển có `tình thương`, không
+    // có `tình thường`. Sửa được ngay, không cần mô hình.
     s.push_str("<p>Tình thuơng của mẹ thật lớn.</p>\n");
+    // Tiếng sai cấu tạo mà **không** hàng xóm nào quyết được — phải để ngỏ.
+    s.push_str("<p>Ừ thuơng à.</p>\n");
     // Không được đụng: số kiểu Việt Nam, tên riêng nước ngoài, thực thể XML.
     s.push_str("<p>Giá 1,5 triệu và 12.000 đồng lúc 10:30.</p>\n");
     s.push_str("<p>Giáo sư Dumbledore nhìn Voldemort &amp; bỏ đi.</p>\n");
@@ -122,11 +125,19 @@ fn khong_dung_vao_thu_khong_duoc_dung() {
 }
 
 #[test]
-fn tieng_sai_nhieu_cach_sua_thi_de_lai() {
+fn tu_ghep_sua_duoc_ma_khong_can_mo_hinh() {
+    let (_, ch) = chay("tughep");
+    // `tình thuơng` → `tình thương`: từ điển có `tình thương` mà không có
+    // `tình thường`. Bằng chứng dứt khoát nên sửa ngay, không cần mô hình.
+    assert!(ch.contains("Tình thương của mẹ"), "chưa dùng bằng chứng từ ghép:\n{ch}");
+}
+
+#[test]
+fn tieng_sai_khong_ai_quyet_duoc_thi_de_lai() {
     let (kq, ch) = chay("ngo");
-    // Không có mô hình thì `thuơng` có nhiều cách sửa như nhau — không được
-    // đoán bừa, phải để nguyên và ghi vào danh sách chỗ ngờ.
-    assert!(ch.contains("thuơng"), "đã đoán bừa:\n{ch}");
+    // `Ừ thuơng à` — không hàng xóm nào ghép thành từ có thật, và không có mô
+    // hình. Không được đoán bừa: để nguyên, ghi vào danh sách chỗ ngờ.
+    assert!(ch.contains("Ừ thuơng à"), "đã đoán bừa:\n{ch}");
     assert!(
         kq.chua_sua.iter().any(|c| c.goc == "thuơng"),
         "không ghi vào chỗ ngờ: {:?}",

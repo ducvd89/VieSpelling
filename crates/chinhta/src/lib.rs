@@ -33,4 +33,5 @@ pub mod doi_chieu;
 pub mod soat;
 pub mod sua;
 pub mod tach_tu;
+pub mod tu_dien;
 pub mod ung_vien;

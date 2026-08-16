@@ -69,16 +69,21 @@ pub fn dang_tu(chu: &str) -> DangTu {
     if chu_cai.len() > 1 && chu_cai.iter().all(|c| c.is_uppercase()) {
         return DangTu::VietTat;
     }
+    // Không có nguyên âm thì không phải tiếng, dù mang dấu hay không. Phép thử
+    // này phải đứng **trước** phép thử dấu: chữ `đ` đứng một mình là chữ Việt
+    // về mặt ký tự nhưng không phải một tiếng, mà xếp nó vào `TiengViet` thì bộ
+    // kiểm âm tiết bắt nó rồi bộ sửa gán cho một nguyên âm — gặp 50 lần trong
+    // ba cuốn sách đo được.
+    if !chu.chars().any(la_nguyen_am) {
+        return DangTu::KhongPhaiChu;
+    }
     // Có dấu tiếng Việt — dấu thanh hoặc dấu phụ — thì chắc chắn là chữ Việt.
     // Đây là phép thử duy nhất đáng tin khi chỉ nhìn một tiếng: không ngôn ngữ
     // nào khác trong sách tiếng Việt dùng `ă â ê ô ơ ư đ` hay dấu thanh.
-    let co_dau = chu.chars().any(|c| !c.is_ascii_alphabetic());
-    if co_dau {
+    if chu.chars().any(|c| !c.is_ascii_alphabetic()) {
         DangTu::TiengViet
-    } else if chu.chars().any(la_nguyen_am) {
-        DangTu::KhongDau
     } else {
-        DangTu::KhongPhaiChu // toàn phụ âm, không phải tiếng
+        DangTu::KhongDau
     }
 }
 
@@ -111,5 +116,8 @@ mod kiem {
         assert_eq!(dang_tu("khong"), DangTu::KhongDau);
         assert_eq!(dang_tu("USB"), DangTu::VietTat);
         assert_eq!(dang_tu("Dumbledore"), DangTu::KhongDau);
+        // Chữ cái đứng một mình không phải một tiếng, dù là chữ Việt.
+        assert_eq!(dang_tu("đ"), DangTu::KhongPhaiChu);
+        assert_eq!(dang_tu("ngh"), DangTu::KhongPhaiChu);
     }
 }

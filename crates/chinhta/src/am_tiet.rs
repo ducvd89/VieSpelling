@@ -61,25 +61,32 @@ const VAN: &[&str] = &[
     // Âm cuối bán nguyên âm -i/-y
     "ai", "ay", "ây", "oi", "ôi", "ơi", "ui", "ưi", "oai", "oay", "uây", "uôi", "ươi",
     // Âm cuối bán nguyên âm -u/-o
-    "ao", "au", "âu", "eo", "êu", "iu", "ưu", "iêu", "yêu", "ươu", "oeo", "uyu",
+    "ao", "au", "âu", "eo", "êu", "iu", "ưu", "iêu", "yêu", "ươu", "oao", "oeo", "uyu",
     // Âm cuối -m
-    "am", "ăm", "âm", "em", "êm", "im", "om", "ôm", "ơm", "um", "ươm", "iêm", "yêm", "uôm", "oam",
-    "oăm",
+    "am", "ăm", "âm", "em", "êm", "im", "om", "ôm", "ơm", "um", "ưm", "ươm", "iêm", "yêm", "uôm",
+    "oam", "oăm", "oem",
     // Âm cuối -n
     "an", "ăn", "ân", "en", "ên", "in", "on", "ôn", "ơn", "un", "ưn", "iên", "yên", "uôn", "ươn",
     "oan", "oăn", "oen", "uân", "uyên",
     // Âm cuối -ng
-    "ang", "ăng", "âng", "eng", "ong", "ông", "ung", "ưng", "iêng", "uông", "ương", "oang", "oăng",
-    "oong", "uâng",
+    "ang", "ăng", "âng", "eng", "êng", "ong", "ông", "ung", "ưng", "iêng", "uông", "ương", "oang",
+    "oăng", "oong", "uâng",
     // Âm cuối -nh
     "anh", "ênh", "inh", "oanh", "uynh", "uênh",
     // Âm cuối -p
-    "ap", "ăp", "âp", "ep", "êp", "ip", "op", "ôp", "ơp", "up", "ươp", "iêp",
+    "ap", "ăp", "âp", "ep", "êp", "ip", "op", "ôp", "ơp", "up", "ươp", "iêp", "oap",
     // Âm cuối -t
     "at", "ăt", "ât", "et", "êt", "it", "ot", "ôt", "ơt", "ut", "ưt", "iêt", "yêt", "uôt", "ươt",
     "oat", "oăt", "oet", "uât", "uyt", "uyêt",
     // Âm cuối -c
-    "ac", "ăc", "âc", "oc", "ôc", "uc", "ưc", "iêc", "uôc", "ươc", "oac", "oăc", "ooc",
+    //
+    // `ec`, `êc`, `ic` trông lạ mắt nên bản đầu quên mất, mà chúng có thật:
+    // `méc`, `xéc`, `nhếc`, `híc`, `nhích` (dạng `hic`). Thiếu một vần là **mọi
+    // tiếng mang vần ấy đều bị báo sai rồi bị sửa thành tiếng khác** — lấy chữ
+    // đúng của tác giả đổi thành chữ sai, hỏng ngược hẳn với việc app này làm.
+    // Tìm ra bằng `examples/soi_van.rs`, quét chín triệu tiếng trong sách thật.
+    "ac", "ăc", "âc", "ec", "êc", "ic", "oc", "ôc", "uc", "ưc", "iêc", "uôc", "ươc", "oac", "oăc",
+    "oec", "ooc",
     // Âm cuối -ch
     "ach", "êch", "ich", "oach", "uêch", "uych",
 ];
@@ -182,18 +189,48 @@ pub fn tach_khung(khung: &str) -> Option<(String, String)> {
             break;
         }
     }
-    let mut van = &khung[am_dau.len()..];
+    // `van_viet` là phần **như đã viết ra**; `van` là vần thật sau khi trả lại
+    // chữ mà âm đầu nuốt mất. Hai thứ này khác nhau đúng ở ca `quýt`/`giếng`,
+    // và luật chính tả bên dưới phải xét bản viết: luật cấm `qu` đi với vần bắt
+    // đầu bằng `u` là cấm viết `quuýt`, chứ không cấm chính chữ `quýt`.
+    let van_viet = &khung[am_dau.len()..];
+    let mut van = van_viet;
     let bu;
-    if am_dau == "gi" && !VAN.contains(&van) {
-        bu = format!("i{van}");
-        if VAN.contains(&bu.as_str()) {
-            van = &bu;
+    if let Some(c) = chu_bi_nuot(am_dau) {
+        if !VAN.contains(&van) {
+            bu = format!("{c}{van}");
+            if VAN.contains(&bu.as_str()) {
+                van = &bu;
+            }
         }
     }
-    if !VAN.contains(&van) || !hop_le_am_dau_van(am_dau, van) {
+    if !VAN.contains(&van) || !hop_le_am_dau_van(am_dau, van_viet) {
         return None;
     }
     Some((am_dau.to_string(), van.to_string()))
+}
+
+/// Chữ mà âm đầu này **nuốt mất** của vần đi sau, nếu có.
+///
+/// Hai âm đầu viết bằng hai chữ mà chữ sau lại trùng với chữ mở đầu vần, nên
+/// chính tả viết gộp làm một:
+///
+/// | Âm đầu | Vần | Viết ra | Chứ không phải |
+/// |---|---|---|---|
+/// | `gi` | `iêng` | `giếng` | `giiếng` |
+/// | `gi` | `in` | `gìn` | `giìn` |
+/// | `qu` | `uyt` | `quýt` | `quuýt` |
+/// | `qu` | `uynh` | `quỳnh` | `quuỳnh` |
+///
+/// Nên khi phần còn lại sau âm đầu không thành vần, phải thử trả lại chữ đã bị
+/// nuốt. Bản đầu chỉ xử lý `gi` mà quên `qu`, nên `quýt` và `quỳnh` bị báo sai —
+/// 85 lần trong ba cuốn sách đo được.
+fn chu_bi_nuot(am_dau: &str) -> Option<char> {
+    match am_dau {
+        "gi" => Some('i'),
+        "qu" => Some('u'),
+        _ => None,
+    }
 }
 
 /// Thanh này gắn vào vần kia có hợp lệ không.
@@ -250,16 +287,17 @@ pub fn tach(tieng: &str) -> Option<AmTiet> {
             break;
         }
     }
-    let mut van = &goc[am_dau.len()..];
+    let van_viet = &goc[am_dau.len()..];
+    let mut van = van_viet;
 
-    // Âm đầu `gi` gặp vần bắt đầu bằng `i` thì chính tả **viết gộp hai chữ i
-    // làm một**: `gi` + `i` ra `gì` chứ không phải `giì`, `gi` + `in` ra `gìn`.
-    // Nên khi phần còn lại không thành vần, thử trả lại chữ `i` đã bị nuốt.
+    // Trả lại chữ mà âm đầu đã nuốt — xem [`chu_bi_nuot`].
     let bu;
-    if am_dau == "gi" && !VAN.contains(&van) {
-        bu = format!("i{van}");
-        if VAN.contains(&bu.as_str()) {
-            van = &bu;
+    if let Some(c) = chu_bi_nuot(am_dau) {
+        if !VAN.contains(&van) {
+            bu = format!("{c}{van}");
+            if VAN.contains(&bu.as_str()) {
+                van = &bu;
+            }
         }
     }
 
@@ -275,7 +313,7 @@ pub fn tach(tieng: &str) -> Option<AmTiet> {
             return None;
         }
     }
-    if !hop_le_am_dau_van(am_dau, van) {
+    if !hop_le_am_dau_van(am_dau, van_viet) {
         return None;
     }
 
@@ -310,10 +348,10 @@ fn hop_le_am_dau_van(am_dau: &str, van: &str) -> bool {
 /// Ghép âm tiết trở lại thành chữ, đặt dấu thanh đúng chỗ.
 pub fn ghep(at: &AmTiet, kieu_moi: bool) -> String {
     let mut s = String::with_capacity(am_do_dai(at));
-    // Chỗ viết gộp: `gi` + vần bắt đầu bằng `i` chỉ viết một chữ i.
-    // `gi`+`i`→`gì`, `gi`+`in`→`gìn`, `gi`+`iêng`→`giếng`.
-    if at.am_dau == "gi" && at.van.starts_with('i') {
-        s.push('g');
+    // Chỗ viết gộp: âm đầu nuốt chữ đầu của vần — xem [`chu_bi_nuot`].
+    // `gi`+`iêng`→`giếng`, `qu`+`uyt`→`quýt`.
+    if chu_bi_nuot(&at.am_dau).is_some() && chu_bi_nuot(&at.am_dau) == at.van.chars().next() {
+        s.push_str(&at.am_dau[..at.am_dau.len() - 1]);
     } else {
         s.push_str(&at.am_dau);
     }
@@ -413,6 +451,30 @@ mod kiem {
                 "phần chữ đổi: {tieng} → {lai}"
             );
         }
+    }
+
+    #[test]
+    fn nhan_nhung_van_de_bi_bo_quen() {
+        // Bốn vần này trông lạ nên bản đầu quên mất, và mỗi vần bị quên là mọi
+        // tiếng mang nó bị sửa thành tiếng khác. Tìm ra bằng cách quét chín
+        // triệu tiếng trong sách thật — xem `examples/soi_van.rs`.
+        for tieng in ["méc", "éc", "xéc", "nhếc", "híc", "nhích", "hừm", "ừm"] {
+            assert!(hop_le(tieng), "vần của `{tieng}` không có trong bảng");
+        }
+    }
+
+    #[test]
+    fn am_dau_qu_nuot_chu_u_cua_van() {
+        // `quýt` là qu + uyt, `quỳnh` là qu + uynh — chính tả viết gộp hai chữ
+        // u làm một. Bản đầu chỉ xử lý ca tương tự của `gi` mà quên `qu`, nên
+        // hai chữ này bị báo sai 85 lần trong ba cuốn sách.
+        for tieng in ["quýt", "quỳnh", "quýnh"] {
+            assert!(hop_le(tieng), "`{tieng}` phải hợp lệ");
+            let at = tach(tieng).unwrap();
+            assert_eq!(ghep(&at, false), tieng, "ghép lại không ra chính nó");
+        }
+        // Và không được nhận bừa: `qu` + vần bắt đầu bằng `o` vẫn phải bị loại.
+        assert!(!hop_le("quoan"));
     }
 
     #[test]

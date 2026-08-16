@@ -24,10 +24,17 @@ pub enum Muc {
 }
 
 impl Muc {
+    /// Ký hiệu đứng đầu dòng.
+    ///
+    /// Chỉ dùng ký tự nằm trong **Latin-1** (`»`, `!`). Ký hiệu đẹp hơn như
+    /// `▸ ▶ ⚑` nằm ngoài các khối mà phông giao diện Windows phủ, và thiếu
+    /// glyph thì Segoe UI vẽ ra ô vuông trống — đã dẫm phải đúng chỗ này với
+    /// `▸`. `tests/phong_chu.rs` quét mọi ký tự ngoài ASCII trong mã nguồn giao
+    /// diện để chuyện ấy không tái diễn.
     pub fn dau(self) -> &'static str {
         match self {
             Muc::ChiTiet => "  ",
-            Muc::Buoc => "▸ ",
+            Muc::Buoc => "» ",
             Muc::CanhBao => "! ",
         }
     }
