@@ -1,5 +1,25 @@
 # Dữ liệu trong thư mục này
 
+## Giấy phép — đọc trước khi dùng lại
+
+`am-tiet.txt` và `tu-ghep.txt` **không phải tác phẩm của dự án này** và không
+chịu giấy phép MIT của phần mã nguồn. Chúng là dữ liệu phái sinh từ ba bộ từ điển
+của người khác.
+
+Điều khoản của từng nguồn, theo chỗ biết được:
+
+| Nguồn | Giấy phép |
+|---|---|
+| Wiktionary tiếng Việt | CC BY-SA 3.0 / GFDL |
+| tudientv | **chưa xác minh** |
+| Hồ Ngọc Đức | **chưa xác minh** |
+
+Hai dòng cuối chưa tra được điều khoản. Ai định dùng lại hai file này ngoài phạm
+vi cá nhân thì nên tự kiểm lại nguồn trước.
+
+Phần chắt ra chỉ gồm **danh sách chữ** — không có định nghĩa, ví dụ hay bất cứ
+phần biên soạn nào của các bộ từ điển.
+
 ## `am-tiet.txt` và `tu-ghep.txt`
 
 Chắt ra từ ba bộ từ điển tiếng Việt, bằng `crates/chinhta/examples/dung_tu_dien.rs`:
