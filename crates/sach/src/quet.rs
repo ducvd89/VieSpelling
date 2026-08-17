@@ -54,10 +54,8 @@ pub struct Doan {
 impl Doan {
     /// Đổi một khoảng trong đoạn thành khoảng byte trong file.
     ///
-    /// Trả `None` khi khoảng **vắt qua hai nút** — tức phép sửa đè lên ranh
-    /// giới thẻ, ví dụ muốn sửa `khô<i>ng</i>` thành `không`. Sửa được ca ấy thì
-    /// phải xoá thẻ `<i>`, mà đó là đổi cấu trúc chứ không phải sửa chính tả.
-    /// Bỏ qua là đúng, và ca này hiếm.
+    /// Trả `None` khi khoảng **vắt qua hai nút**, tức phép sửa đè lên ranh giới
+    /// thẻ. Dùng [`Doan::ve_file_qua_the`] để vá được cả ca ấy.
     pub fn ve_file(&self, r: &Range<usize>) -> Option<Range<usize>> {
         let m = self
             .manh
@@ -65,16 +63,100 @@ impl Doan {
             .find(|m| r.start >= m.trong_doan.start && r.end <= m.trong_doan.end)?;
         Some(m.ve_file(r.start)?..m.ve_file(r.end)?)
     }
+
+    /// Như [`Doan::ve_file`] nhưng vá được cả chỗ **vắt qua thẻ định dạng**.
+    ///
+    /// Sách convert hay cắt chữ làm đôi bằng một thẻ vô nghĩa —
+    /// `thuơ<i>ng</i>`, `khô<b>ng</b>`. [`quet`] đã nối chúng lại nên bộ dò
+    /// **đọc** đúng chữ, nhưng lúc **vá** thì chỗ sửa nằm trên hai nút và
+    /// `ve_file` đành bỏ. Kết quả là một lớp lỗi được tìm ra rồi bị bỏ rơi.
+    ///
+    /// Trả về các khoảng byte mà chỗ sửa phủ lên, theo thứ tự. Người gọi ghi
+    /// toàn bộ chữ mới vào khoảng **đầu tiên** và xoá rỗng những khoảng sau.
+    /// Thẻ vẫn nằm nguyên chỗ cũ, chỉ là rỗng ruột — `thương<i></i>`. Trình đọc
+    /// nào cũng hiển thị y hệt, và phần định dạng bị mất vốn là định dạng của
+    /// nửa chữ, tức là đằng nào cũng vô nghĩa.
+    ///
+    /// Trả `None` khi giữa hai nút có thứ gì **không phải thẻ định dạng** —
+    /// ảnh, liên kết, ngắt dòng, chú thích. Ở đó việc dồn chữ về một phía làm
+    /// đổi thứ tự nội dung, không còn là sửa chính tả nữa.
+    pub fn ve_file_qua_the(&self, file: &str, r: &Range<usize>) -> Option<Vec<Range<usize>>> {
+        if let Some(mot) = self.ve_file(r) {
+            return Some(vec![mot]);
+        }
+        let phu: Vec<&Manh> = self
+            .manh
+            .iter()
+            .filter(|m| m.trong_doan.start < r.end && r.start < m.trong_doan.end)
+            .collect();
+        if phu.len() < 2 {
+            return None;
+        }
+        for hai in phu.windows(2) {
+            let giua = file.get(hai[0].trong_file.end..hai[1].trong_file.start)?;
+            if !chi_toan_the_dinh_dang(giua) {
+                return None;
+            }
+        }
+        let mut ra = Vec::with_capacity(phu.len());
+        for m in phu {
+            let dau = r.start.max(m.trong_doan.start);
+            let cuoi = r.end.min(m.trong_doan.end);
+            ra.push(m.ve_file(dau)?..m.ve_file(cuoi)?);
+        }
+        Some(ra)
+    }
+}
+
+/// Thẻ chỉ đổi **cách hiển thị chữ**, không đổi nội dung hay thứ tự của nó.
+///
+/// Danh sách cố tình hẹp. Mọi thẻ ngoài đây — `a`, `img`, `br`, `ruby`, `sup`
+/// dùng làm chú thích — đều mang thông tin riêng, và dồn chữ qua chúng là đổi
+/// nghĩa chứ không phải sửa chính tả.
+const THE_DINH_DANG: [&str; 9] =
+    ["i", "b", "em", "strong", "span", "u", "s", "small", "big"];
+
+/// Khoảng giữa hai nút văn bản có chỉ gồm thẻ định dạng không.
+fn chi_toan_the_dinh_dang(giua: &str) -> bool {
+    let b = giua.as_bytes();
+    let mut i = 0usize;
+    while i < b.len() {
+        if b[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if b[i] != b'<' {
+            return false;
+        }
+        let het = het_the(giua, i);
+        let (ten, _) = doc_ten(&giua[i..het]);
+        if !THE_DINH_DANG.contains(&ten.as_str()) {
+            return false;
+        }
+        i = het;
+    }
+    true
 }
 
 /// Thẻ mà nội dung bên trong không phải văn xuôi — bỏ hẳn.
 const THE_BO_QUA: [&str; 4] = ["script", "style", "code", "pre"];
 
 /// Thẻ khối: gặp thì ngắt đoạn. `br` cũng ở đây vì nó ngắt dòng thật.
-const THE_KHOI: [&str; 27] = [
+///
+/// Nhóm cuối (`html`, `head`, `title`, `meta`, `link`) không phải thẻ khối theo
+/// nghĩa trình bày, nhưng phải ngắt đoạn ở đó vì lý do khác: không ngắt thì
+/// khoảng trắng xuống dòng giữa `</head>` và `<body>` dính vào cùng một đoạn
+/// với nhan đề trong `<title>`, rồi tầng dọn khoảng trắng đòi gộp chúng lại —
+/// một phép sửa vắt qua `<title>`, tức là vắt qua thẻ không phải định dạng nên
+/// không vá được. Đo trên một bộ truyện 2.998 chương thì đó đúng là **5.996**
+/// chỗ báo "vướng thẻ HTML", tức hai chỗ mỗi file, mà không chỗ nào là văn xuôi.
+///
+/// Ngắt ở đây còn được thêm một thứ: nhan đề trong `<title>` thành một đoạn
+/// riêng và được kiểm chính tả như mọi đoạn khác.
+const THE_KHOI: [&str; 32] = [
     "p", "div", "br", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "th", "tr", "blockquote",
     "section", "article", "hr", "table", "ul", "ol", "dl", "dd", "dt", "figure", "figcaption",
-    "aside", "body",
+    "aside", "body", "html", "head", "title", "meta", "link",
 ];
 
 /// Quét toàn bộ file, trả về các đoạn.
@@ -257,7 +339,63 @@ mod kiem {
     fn sua_vat_qua_hai_nut_thi_bo_qua() {
         let f = "<p>khô<i>ng</i></p>";
         let d = quet(f);
-        // "không" nằm vắt qua ranh giới thẻ `<i>` nên không vá được.
+        // "không" nằm vắt qua ranh giới thẻ `<i>` nên `ve_file` không vá được.
         assert!(d[0].ve_file(&(0.."không".len())).is_none());
+    }
+
+    /// Áp các khoảng vá theo đúng cách `xu_ly` áp: chữ mới vào khoảng đầu, các
+    /// khoảng sau xoá rỗng.
+    fn va(file: &str, khoang: &[Range<usize>], moi: &str) -> String {
+        let mut ra = String::new();
+        let mut cuoi = 0usize;
+        for (k, r) in khoang.iter().enumerate() {
+            ra.push_str(&file[cuoi..r.start]);
+            if k == 0 {
+                ra.push_str(moi);
+            }
+            cuoi = r.end;
+        }
+        ra.push_str(&file[cuoi..]);
+        ra
+    }
+
+    #[test]
+    fn va_duoc_chu_bi_the_dinh_dang_cat_doi() {
+        // Sách convert hay cắt chữ làm đôi bằng một thẻ vô nghĩa. Bộ dò đọc
+        // đúng `thuơng` (nhờ nối nút), nên nó cũng phải **sửa** được.
+        let f = "<p>tình thuơ<i>ng</i> của mẹ</p>";
+        let d = quet(f);
+        let vt = d[0].chu.find("thuơng").unwrap();
+        let khoang = d[0].ve_file_qua_the(f, &(vt..vt + "thuơng".len())).unwrap();
+        assert_eq!(khoang.len(), 2, "phải phủ hai nút");
+        assert_eq!(va(f, &khoang, "thương"), "<p>tình thương<i></i> của mẹ</p>");
+    }
+
+    #[test]
+    fn khong_va_qua_the_khong_phai_dinh_dang() {
+        // Ảnh, liên kết, ngắt dòng mang thông tin riêng; dồn chữ qua chúng là
+        // đổi thứ tự nội dung chứ không phải sửa chính tả.
+        for f in [
+            r#"<p>thuơ<img src="a.png"/>ng</p>"#,
+            r#"<p>thuơ<a href="x">ng</a></p>"#,
+            "<p>thuơ<br/>ng</p>",
+        ] {
+            let d = quet(f);
+            let Some(doan) = d.first() else { continue };
+            let Some(vt) = doan.chu.find("thuơng") else { continue };
+            assert!(
+                doan.ve_file_qua_the(f, &(vt..vt + "thuơng".len())).is_none(),
+                "không được vá qua: {f}"
+            );
+        }
+    }
+
+    #[test]
+    fn va_duoc_qua_nhieu_the_lien_tiep() {
+        let f = "<p>thu</b><i>ơng</i></p>";
+        let d = quet(f);
+        let vt = d[0].chu.find("thuơng").unwrap();
+        let khoang = d[0].ve_file_qua_the(f, &(vt..vt + "thuơng".len())).unwrap();
+        assert_eq!(va(f, &khoang, "thương"), "<p>thương</b><i></i></p>");
     }
 }

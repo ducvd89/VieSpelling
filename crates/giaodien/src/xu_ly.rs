@@ -180,10 +180,17 @@ pub fn xu_ly(
             // Đối chiếu bản trước/sau để biết vá byte nào. Xem `doi_chieu` về
             // lý do không dùng thẳng vị trí trong `da_sua`.
             for khac in doi_chieu::so(&d.chu, &r.chu) {
-                match d.ve_file(&khac.cu) {
-                    Some(trong_file) => va.push((trong_file, khac.moi)),
-                    // Chỗ sửa vắt qua ranh giới thẻ — vá được thì phải xoá thẻ,
-                    // mà đó là đổi cấu trúc chứ không phải sửa chính tả.
+                match d.ve_file_qua_the(&noi_dung, &khac.cu) {
+                    // Chữ mới vào khoảng **đầu tiên**, các khoảng sau xoá rỗng.
+                    // Chỗ sửa vắt qua một thẻ định dạng thì dồn chữ về phía
+                    // trước, thẻ ở lại nhưng rỗng ruột.
+                    Some(khoang) => {
+                        for (k, r) in khoang.into_iter().enumerate() {
+                            va.push((r, if k == 0 { khac.moi.clone() } else { String::new() }));
+                        }
+                    }
+                    // Giữa hai nút có thứ không phải thẻ định dạng — ảnh, liên
+                    // kết, ngắt dòng. Dồn chữ qua đó là đổi thứ tự nội dung.
                     None => kq.vuong_the += 1,
                 }
             }

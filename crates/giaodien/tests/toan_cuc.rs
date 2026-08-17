@@ -53,9 +53,16 @@ fn chuong() -> String {
     s.push_str("<p>Giáo sư Dumbledore nhìn Voldemort &amp; bỏ đi.</p>\n");
     // Chữ bị thẻ inline cắt đôi — phải nối lại để khỏi báo lỗi ma.
     s.push_str("<p>Trời khô<i>ng</i> bao giờ đổi.</p>\n");
-    // Hai khoảng trắng nằm vắt qua thẻ đóng: nút trước kết thúc bằng khoảng
-    // trắng, nút sau bắt đầu bằng khoảng trắng. Gộp chúng thì phải xén thẻ.
+    // Hai khoảng trắng nằm vắt qua thẻ đóng. `<i>` là thẻ định dạng nên vá được.
     s.push_str("<p>Xin <i>chào </i> bạn nhé.</p>\n");
+    // Thẻ định dạng nằm **giữa chính chữ bị đổi** — đọc được và sửa được.
+    // Đặt thẻ ở chỗ khác trong cụm thì không kiểm được gì: phép đối chiếu làm
+    // việc theo từng chữ, nên `xử dụ<i>ng</i>` có chữ đổi là `xử`, nằm gọn
+    // trong một nút và chẳng vắt qua thẻ nào.
+    s.push_str("<p>Cách x<i>ử</i> dụng máy.</p>\n");
+    // Cùng chỗ ngắt ấy nhưng là **ảnh**. Đọc được nhưng không sửa được: dồn
+    // chữ qua ảnh là đổi thứ tự nội dung, không còn là sửa chính tả.
+    s.push_str("<p>Anh x<img src=\"a.png\"/>ử dụng nó.</p>\n");
     // Trong `<pre>` thì không đụng tới.
     s.push_str("<pre>xử dụng</pre>\n");
     s.push_str("</body></html>\n");
@@ -132,6 +139,19 @@ fn tu_ghep_sua_duoc_ma_khong_can_mo_hinh() {
     // `tình thuơng` → `tình thương`: từ điển có `tình thương` mà không có
     // `tình thường`. Bằng chứng dứt khoát nên sửa ngay, không cần mô hình.
     assert!(ch.contains("Tình thương của mẹ"), "chưa dùng bằng chứng từ ghép:\n{ch}");
+}
+
+#[test]
+fn sua_duoc_chu_bi_the_dinh_dang_cat_doi() {
+    let (_, ch) = chay("the");
+    // `x<i>ử</i> dụng` đọc ra `xử dụng`, sửa thành `sử dụng`. Chữ dồn về phía
+    // trước, thẻ ở lại nhưng rỗng ruột — trình đọc nào cũng hiện y hệt.
+    assert!(ch.contains("Cách sử<i></i> dụng máy"), "chưa vá qua thẻ định dạng:\n{ch}");
+    // Còn qua thẻ ảnh thì không đụng: nội dung phải giữ nguyên thứ tự.
+    assert!(
+        ch.contains("Anh x<img src=\"a.png\"/>ử dụng nó"),
+        "đã dồn chữ qua ảnh:\n{ch}"
+    );
 }
 
 #[test]
@@ -213,14 +233,15 @@ fn chay_lai_lan_hai_khong_doi_gi_nua() {
     let kq2 = chay_xu_ly(&ra1, &ra2);
 
     assert!(kq1.vuong_the > 0, "EPUB thử nghiệm phải có ca vướng thẻ để bài kiểm có nghĩa");
-    for s in &kq2.da_sua {
-        assert_eq!(
-            s.loai,
-            chinhta::sua::Loai::KhoangTrang,
-            "lượt hai sửa thứ không phải khoảng trắng vướng thẻ — bộ sửa giằng co: {s:?}"
-        );
-    }
     assert_eq!(kq2.vuong_the, kq1.vuong_the, "số chỗ vướng thẻ phải ổn định giữa hai lượt");
+    // Lượt hai còn sửa đúng bằng số chỗ vướng thẻ: đó là những chỗ lượt nào
+    // cũng tìm ra mà lượt nào cũng không vá được.
+    assert_eq!(
+        kq2.da_sua.len(),
+        kq2.vuong_the,
+        "lượt hai sửa thứ khác ngoài chỗ vướng thẻ — bộ sửa giằng co: {:?}",
+        kq2.da_sua
+    );
 
     // Và quan trọng nhất: hai file ra phải **giống hệt nhau**. Đây mới là điều
     // người dùng cảm nhận được — chạy lại không làm sách xấu đi thêm.
