@@ -59,6 +59,12 @@ impl CaiDat {
             de_nham: self.de_nham,
             chu_khong_dau: self.chu_khong_dau,
             nguong_mo_hinh: self.nguong_mo_hinh,
+            // Bản cửa sổ giữ đúng một lối chấm — lối đã đo là tốt hơn. Một cái
+            // hộp đánh dấu "đổi cách hỏi mô hình" thì người dùng không có cách
+            // nào chọn đúng: chọn xong cũng chẳng thấy gì khác ngoài thời gian
+            // chạy, còn cái khác thật thì nằm ở loại lỗi sai, phải đo cả cuốn
+            // sách mới thấy. Muốn so lại thì dùng `vsc --ca-cau`.
+            kieu_cham: chinhta::soat::KieuCham::default(),
         }
     }
 

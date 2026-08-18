@@ -18,6 +18,39 @@
 //! thấy thì không cách nào lọt vào sách được, vì nó không tồn tại trong danh
 //! sách ứng viên.
 //!
+//! # Hai cách hỏi cùng một mô hình
+//!
+//! [`MoHinh::cham`] chấm **cả câu**: mỗi ứng viên thay vào rồi chấm lại từ đầu.
+//! [`MoHinh::cham_cho_trong`] khoét chỗ chữ sai thành **chỗ trống** rồi chỉ chấm
+//! phần điền vào cùng mấy chữ theo sau, còn phần ngữ cảnh đứng trước — hai câu
+//! trước và đầu câu hiện tại — chỉ để mô hình đọc chứ không tính điểm.
+//!
+//! Đo trên tập 4 Harry Potter, cùng ngưỡng 0,03, cả hai bắt gần bằng nhau (126
+//! so với 122 lỗi chữ nghĩa, 0 chỗ ngờ để lại) và quyết khác nhau ở 8 trong 86
+//! chỗ mô hình được hỏi. Cái khác nhau **không** nằm ở số lượng mà ở chỗ điểm số
+//! có dùng làm độ tin cậy được hay không:
+//!
+//! | chỗ sửa | đúng phải | cả câu | chỗ trống |
+//! |---|---|---|---|
+//! | `thuớc` → `thước` | sửa | +0,097 | +0,115 |
+//! | `bôj` → `bộ` | sửa | +0,105 | +0,142 |
+//! | `zợi` → `sợi` | **giữ** (giọng nhân vật) | **+0,504** | −0,024 |
+//! | `ghứ` → `chữ` | **giữ** | **+0,715** | +0,210 |
+//! | `shứ` → `chứ` | **giữ** | **+0,317** | +0,190 |
+//!
+//! Chấm cả câu thì mấy ca **sai** lại được điểm cao gấp mấy lần mấy ca đúng, nên
+//! không ngưỡng nào tách được chúng: nâng ngưỡng lên là mất phép sửa thật trước
+//! khi chặn được phép sửa nhầm. Lối điền chỗ trống đảo lại đúng thứ tự ấy, và đó
+//! là lý do nó chịu được ngưỡng rộng gấp hai mươi lần (xem `examples/so_loi_cham.rs`).
+//!
+//! Giá phải trả là **thời gian**: 69 giây lên 106…115 giây (đo nhiều lượt) cho
+//! cùng 1.427 lượt chấm, vì phần ngữ cảnh đứng trước dài hơn hẳn một câu. Phần ấy
+//! giống nhau ở mọi ứng viên của cùng một chỗ sửa nên bộ nhớ đệm KV giữ lại được
+//! — 86 lượt nạp thay vì 1.427 — nhưng vẫn phải nạp một lần cho mỗi chỗ.
+//!
+//! Điều **không** đổi là mô hình vẫn không viết ra chữ nào: nó chấm những chữ
+//! ta đưa cho nó điền vào chỗ trống, chứ không được tự chọn chữ ngoài danh sách.
+//!
 //! # Chọn mô hình
 //!
 //! Cỡ nào cũng chạy được, nhưng cỡ có ảnh hưởng thật, và ảnh hưởng **không đều**
@@ -43,12 +76,19 @@ use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaModel};
+use llama_cpp_2::token::LlamaToken;
 use std::cell::RefCell;
 use std::num::NonZeroU32;
 use std::path::Path;
 
-/// Số token tối đa cho một lượt chấm. Câu dài hơn bị cắt bớt đầu.
-const NGU_CANH: u32 = 512;
+/// Số token tối đa cho một lượt chấm. Chuỗi dài hơn bị cắt bớt đầu.
+///
+/// Chấm cả câu thì 512 đã quá thừa, nhưng lối điền chỗ trống đưa vào hai câu
+/// trước — đo trên sách thật thì cửa sổ ấy dài tới 800 ký tự, mà tiếng Việt qua
+/// bộ tách token của Qwen ra khoảng ba ký tự một token, tức là ngót 300 token.
+/// Để 512 thì gặp đoạn văn dài là cắt mất đúng phần ngữ cảnh vừa thêm vào. Chỗ
+/// này rẻ: 1024 token bộ nhớ đệm KV của mô hình 9 tỷ tham số chỉ tốn vài chục MB.
+const NGU_CANH: u32 = 1024;
 
 /// Số lớp đẩy sang GPU. Đặt cao hơn số lớp của mọi mô hình để nó **đẩy hết**;
 /// llama.cpp tự cắt xuống đúng số lớp thật có.
@@ -116,6 +156,20 @@ pub struct MoHinh {
     /// Trong `Box` nên địa chỉ cố định — đó là điều kiện để mượn `'static` ở
     /// dưới là đúng.
     mo_hinh: Box<LlamaModel>,
+    /// Token của phần **đứng trước chỗ trống** ở lượt chấm gần nhất, và nó đang
+    /// còn nằm trong bộ nhớ đệm KV.
+    ///
+    /// Các ứng viên của cùng một chỗ sửa dùng chung y nguyên phần đứng trước, mà
+    /// phần ấy là phần dài nhất — hai câu ngữ cảnh cộng đầu câu hiện tại. Giữ lại
+    /// thì mỗi ứng viên chỉ phải chạy mấy token của chính nó cộng phần đuôi.
+    ///
+    /// Đáng làm vì số ứng viên mỗi chỗ **nhiều hơn tưởng**: đo trên tập 4 Harry
+    /// Potter là 1.427 lượt chấm cho 86 chỗ sửa, tức 16,6 lượt một chỗ. Không giữ
+    /// lại thì phần đứng trước bị nạp 1.427 lần thay vì 86 lần.
+    ///
+    /// Rỗng nghĩa là bộ đệm không còn tin được — [`MoHinh::cham`] xoá sạch bộ đệm
+    /// nên nó phải xoá luôn dấu vết ở đây.
+    dem_tien_to: RefCell<Vec<LlamaToken>>,
     /// Đếm số lượt, chỉ để hiện trong báo cáo.
     pub so_luot: std::cell::Cell<u64>,
     pub duong_dan: std::path::PathBuf,
@@ -200,6 +254,7 @@ impl MoHinh {
         Ok(MoHinh {
             ngu_canh: RefCell::new(Some(nc)),
             mo_hinh,
+            dem_tien_to: RefCell::new(Vec::new()),
             so_luot: std::cell::Cell::new(0),
             duong_dan: duong_dan.to_path_buf(),
         })
@@ -263,6 +318,11 @@ impl MoHinh {
         // nhau, mỗi câu là một chuỗi độc lập. Quên bước này thì câu sau được
         // chấm như thể nó viết tiếp câu trước, và điểm số thành vô nghĩa.
         nc.clear_kv_cache();
+        // Xoá sạch bộ đệm thì tiền tố mà lối chấm chỗ trống đang giữ cũng mất
+        // theo. Không ghi lại chuyện ấy thì lượt chấm chỗ trống sau tưởng tiền
+        // tố còn nguyên, bỏ luôn bước nạp, và chấm ứng viên trong một ngữ cảnh
+        // trống — hỏng lặng lẽ, không lỗi nào bật ra.
+        self.dem_tien_to.borrow_mut().clear();
         nc.decode(&mut lo).context("mô hình không chạy được")?;
 
         let mut tong = 0.0f32;
@@ -272,6 +332,107 @@ impl MoHinh {
         }
         self.so_luot.set(self.so_luot.get() + 1);
         let so_ky_tu = cau.chars().count().max(1) as f32;
+        Ok(tong / so_ky_tu)
+    }
+
+    /// Log-xác suất của **phần điền vào chỗ trống cộng phần đuôi**, chia cho số
+    /// ký tự của chính phần ấy. Phần `truoc` chỉ để mô hình đọc.
+    ///
+    /// Vì sao không tính điểm phần đứng trước: nó giống hệt nhau ở mọi ứng viên,
+    /// nên nó chỉ cộng thêm một hằng số vào tử và một hằng số vào mẫu. Cộng vào
+    /// mẫu là chỗ hại: hai câu ngữ cảnh dài gấp mấy lần chỗ sửa, và chênh lệch
+    /// giữa `thương` với `thường` bị chia cho cả cụm ấy đến mức chìm dưới ngưỡng.
+    ///
+    /// Phần đuôi (`sau`) thì **phải** tính điểm dù nó cũng giống nhau ở mọi ứng
+    /// viên. Đây là cách duy nhất để một mô hình chỉ đọc xuôi dùng được ngữ cảnh
+    /// đứng sau: chữ điền vào không tự nói lên nó đúng, nhưng chữ **theo sau nó**
+    /// thì trôi chảy hay gượng gạo tuỳ vào nó — `để dành` hay `để giành` phải nhìn
+    /// tới hết câu mới phân được.
+    fn cham_cho_trong_that(&self, truoc: &str, dien: &str, sau: &str) -> Result<f32> {
+        // Khoảng trắng đứng ngay trước chỗ trống phải đi **theo phần được chấm**.
+        // Bộ tách token kiểu BPE gắn khoảng trắng vào đầu chữ (` thương` là một
+        // token, `thương` là token khác), nên cắt ngay sau khoảng trắng thì mọi
+        // ứng viên bị chấm ở dạng "đứng đầu dòng" — dạng mà mô hình gần như không
+        // gặp lúc huấn luyện, và điểm số vì thế mang thêm một lượng nhiễu chung.
+        let (dau_chuoi, phan) = match truoc.strip_suffix(' ') {
+            Some(x) => (x, format!(" {dien}{sau}")),
+            None => (truoc, format!("{dien}{sau}")),
+        };
+        let mut tk_dau = self
+            .mo_hinh
+            .str_to_token(dau_chuoi, AddBos::Always)
+            .context("không tách được token phần đứng trước")?;
+        let tk_phan = self
+            .mo_hinh
+            .str_to_token(&phan, AddBos::Never)
+            .context("không tách được token phần điền vào")?;
+        // Không có gì để chấm, hoặc không có gì làm ngữ cảnh: trả 0 cho mọi ứng
+        // viên, tức là không ai hơn ai và bản gốc thắng.
+        if tk_phan.is_empty() || tk_dau.len() < 2 {
+            return Ok(0.0);
+        }
+        if tk_dau.len() + tk_phan.len() > NGU_CANH as usize {
+            // Cắt phần đầu ngữ cảnh, giữ phần gần chỗ trống. Phải chừa lại ít
+            // nhất một token làm neo (xem dưới).
+            let bo = (tk_dau.len() + tk_phan.len() - NGU_CANH as usize).min(tk_dau.len() - 1);
+            tk_dau.drain(..bo);
+        }
+
+        // **Token cuối của phần đứng trước không nạp vào tiền tố** mà để lại làm
+        // neo, chạy cùng ứng viên. Lý do: xác suất của token đầu tiên trong chỗ
+        // trống lấy từ phân bố dự đoán ở vị trí ngay trước nó, mà `get_logits_ith`
+        // chỉ đọc được logits của **lượt decode vừa rồi**. Nạp cả phần đứng trước
+        // vào tiền tố thì logits ấy nằm ở lượt trước và mất khi chạy lượt ứng
+        // viên — chỉ còn cách sao lại cả bảng logits (hơn 150 nghìn số thực cho
+        // mỗi chỗ sửa) mới lấy lại được. Để lại một token thì rẻ hơn nhiều.
+        let neo = tk_dau[tk_dau.len() - 1];
+        let tien_to = &tk_dau[..tk_dau.len() - 1];
+        let vt_neo = tien_to.len();
+
+        let mut muon = self.ngu_canh.borrow_mut();
+        let nc = muon.as_mut().context("ngữ cảnh đã bị thả")?;
+        let mut dem = self.dem_tien_to.borrow_mut();
+        if dem.as_slice() == tien_to {
+            // Tiền tố còn nguyên trong bộ đệm — chỉ bỏ phần của ứng viên trước.
+            // `clear_kv_cache_seq` trả `false` khi mô hình không cho xoá một
+            // khúc giữa (mô hình hồi quy); lúc ấy nạp lại từ đầu cho chắc.
+            let xoa_duoc = nc
+                .clear_kv_cache_seq(Some(0), Some(vt_neo as u32), None)
+                .unwrap_or(false);
+            if !xoa_duoc {
+                dem.clear();
+            }
+        }
+        if dem.as_slice() != tien_to {
+            nc.clear_kv_cache();
+            let mut lo = LlamaBatch::new(tien_to.len().max(1), 1);
+            for (i, &t) in tien_to.iter().enumerate() {
+                // Chỉ cần logits ở token cuối, mà thật ra không cần cả nó —
+                // nhưng llama.cpp muốn mỗi lượt decode có ít nhất một chỗ ra.
+                lo.add(t, i as i32, &[0], i + 1 == tien_to.len())?;
+            }
+            nc.decode(&mut lo).context("mô hình không chạy được phần ngữ cảnh")?;
+            *dem = tien_to.to_vec();
+        }
+
+        let mut lo = LlamaBatch::new(tk_phan.len() + 1, 1);
+        lo.add(neo, vt_neo as i32, &[0], true)?;
+        for (i, &t) in tk_phan.iter().enumerate() {
+            // Token cuối không cần logits: sau nó không còn gì để chấm.
+            lo.add(t, (vt_neo + 1 + i) as i32, &[0], i + 1 < tk_phan.len())?;
+        }
+        nc.decode(&mut lo).context("mô hình không chạy được phần điền vào")?;
+
+        // Chỗ ra thứ `i` của lượt vừa rồi là phân bố dự đoán token đứng sau token
+        // thứ `i` — tức là đúng `tk_phan[i]`, vì chỗ ra thứ 0 thuộc về neo.
+        let mut tong = 0.0f32;
+        for (i, &t) in tk_phan.iter().enumerate() {
+            tong += log_xac_suat(nc.get_logits_ith(i as i32), t.0 as usize);
+        }
+        self.so_luot.set(self.so_luot.get() + 1);
+        // Chia cho số ký tự, cùng lý do như [`MoHinh::cham_that`]: chia cho số
+        // token thì thêm một token dễ đoán lại nâng điểm lên.
+        let so_ky_tu = phan.chars().count().max(1) as f32;
         Ok(tong / so_ky_tu)
     }
 }
@@ -297,6 +458,19 @@ impl ChamDiem for MoHinh {
         // này — thắng. Nói cách khác mô hình hỏng thì ứng dụng thoái về chế độ
         // không mô hình, chứ không sửa bừa.
         self.cham_that(cau).unwrap_or(f32::NEG_INFINITY)
+    }
+
+    fn cham_cho_trong(&self, truoc: &str, dien: &str, sau: &str) -> f32 {
+        // Lỗi ở đây nguy hơn ở `cham`: một lượt lỗi có thể để lại bộ đệm KV dở
+        // dang, và lượt sau tưởng tiền tố còn nguyên. Nên xoá dấu vết đệm trước
+        // khi trả về, rồi mới để ứng viên ấy tự thua.
+        match self.cham_cho_trong_that(truoc, dien, sau) {
+            Ok(d) => d,
+            Err(_) => {
+                self.dem_tien_to.borrow_mut().clear();
+                f32::NEG_INFINITY
+            }
+        }
     }
 }
 

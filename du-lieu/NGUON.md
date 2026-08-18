@@ -77,3 +77,18 @@ kiểm bù cho nhau, và một tiếng chỉ bị bắt khi **trượt cả hai*
 ## `de-nham.txt`
 
 Gõ tay. Xem phần đầu file.
+
+## `typo.txt`
+
+Bảng typo hay gặp cùng **mọi** cách sửa đã quan sát được cho từng cái. 97 mục, rút
+từ nhật ký chạy trên hai bộ truyện (Harry Potter tập 4 và Phàm Nhân Tu Tiên), ngưỡng
+gặp từ 3 lần trở lên. Xem `crates/chinhta/src/typo.rs` về vì sao phải giữ cả những
+mục có nhiều đáp án.
+
+**Chưa có công cụ sinh lại.** Bảng này dựng bằng một script tạm đọc nhật ký `vsc -v`,
+nên nó chưa theo đúng quy ước của thư mục này — `am-tiet.txt` và `tu-ghep.txt` đều
+sinh ra được bằng `cargo run --example`. Cần viết `crates/giaodien/examples/dung_typo.rs`
+làm đúng việc ấy: chạy đường soát trên một hoặc nhiều EPUB, gom (chữ sai → chữ sửa)
+kèm số lần, rồi in ra bảng. Trước khi có nó thì đừng sửa tay file này — sửa tay là
+mất dấu vết nó từ đâu ra.
+

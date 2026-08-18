@@ -44,8 +44,13 @@ fn chuong() -> String {
     // Tiếng sai cấu tạo mà hàng xóm quyết được: từ điển có `tình thương`, không
     // có `tình thường`. Sửa được ngay, không cần mô hình.
     s.push_str("<p>Tình thuơng của mẹ thật lớn.</p>\n");
-    // Tiếng sai cấu tạo mà **không** hàng xóm nào quyết được — phải để ngỏ.
-    s.push_str("<p>Ừ thuơng à.</p>\n");
+    // Tiếng sai cấu tạo mà **không bằng chứng nào** quyết được — phải để ngỏ.
+    // Chọn chữ cho ca này khó hơn tưởng, vì mỗi tầng bằng chứng lại nuốt mất một
+    // ứng viên: `thuơng` chỉ thiếu một dấu phụ nên tầng luật tự quyết
+    // (`BangChung::DauPhu`), còn `khôgn` thì đã nằm trong `du-lieu/typo.txt` với
+    // đúng một đáp án nên bảng typo quyết. `nhưmg` là lỗi trượt phím, chưa vào
+    // bảng nào, và có nhiều cách sửa cùng cạnh tranh.
+    s.push_str("<p>Ừ nhưmg à.</p>\n");
     // Hai tiếng dính liền vì mất khoảng trắng.
     s.push_str("<p>Nhà Phúlần ở cuối làng.</p>\n");
     // Không được đụng: số kiểu Việt Nam, tên riêng nước ngoài, thực thể XML.
@@ -169,11 +174,11 @@ fn tach_duoc_hai_tieng_dinh_lien() {
 #[test]
 fn tieng_sai_khong_ai_quyet_duoc_thi_de_lai() {
     let (kq, ch) = chay("ngo");
-    // `Ừ thuơng à` — không hàng xóm nào ghép thành từ có thật, và không có mô
-    // hình. Không được đoán bừa: để nguyên, ghi vào danh sách chỗ ngờ.
-    assert!(ch.contains("Ừ thuơng à"), "đã đoán bừa:\n{ch}");
+    // `Ừ nhưmg à` — không bằng chứng nào quyết được, và không có mô hình. Không
+    // được đoán bừa: để nguyên, ghi vào danh sách chỗ ngờ.
+    assert!(ch.contains("Ừ nhưmg à"), "đã đoán bừa:\n{ch}");
     assert!(
-        kq.chua_sua.iter().any(|c| c.goc == "thuơng"),
+        kq.chua_sua.iter().any(|c| c.goc == "nhưmg"),
         "không ghi vào chỗ ngờ: {:?}",
         kq.chua_sua
     );

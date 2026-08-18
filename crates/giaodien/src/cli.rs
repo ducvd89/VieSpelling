@@ -1,12 +1,18 @@
 //! Bản dòng lệnh. Cùng lõi với bản cửa sổ.
 //!
 //! ```text
-//! vsc sach.epub [-o ra.epub] [-m mo-hinh.gguf] [--kho]
+//! vsc sach.epub [-o ra.epub] [-m mo-hinh.gguf] [--kho] [--cho-trong] [-n <ngưỡng>]
 //! ```
 //!
 //! `--kho` (khô) chạy hết mọi tầng rồi in báo cáo mà **không ghi file nào** —
 //! cách an toàn để xem bộ sửa định làm gì với một cuốn sách trước khi cho nó
 //! động vào.
+//!
+//! `--cho-trong` đổi lối hỏi mô hình: khoét chữ sai thành chỗ trống rồi chấm
+//! phần điền vào, thay vì chấm cả câu — và nó tự kéo ngưỡng về con số đo cho lối
+//! ấy. `-n` đặt ngưỡng bằng tay. Hai cờ này để **đo lại** khi đổi mô hình hay đổi
+//! loại sách; xem [`chinhta::soat::KieuCham`]. Chỉ có ở bản dòng lệnh, bản cửa sổ
+//! giữ đúng một lối.
 
 use anyhow::{bail, Result};
 use std::path::PathBuf;
@@ -27,6 +33,8 @@ fn chay() -> Result<()> {
     let mut mo_hinh: Option<PathBuf> = None;
     let mut kho = false;
     let mut chi_tiet = false;
+    let mut cho_trong = false;
+    let mut nguong: Option<f32> = None;
 
     while let Some(a) = doi_so.next() {
         match a.as_str() {
@@ -34,8 +42,18 @@ fn chay() -> Result<()> {
             "-m" => mo_hinh = doi_so.next().map(PathBuf::from),
             "--kho" => kho = true,
             "-v" => chi_tiet = true,
+            "--cho-trong" => cho_trong = true,
+            "-n" => {
+                let Some(v) = doi_so.next().and_then(|s| s.parse::<f32>().ok()) else {
+                    bail!("-n cần một con số, ví dụ `-n 0.05`");
+                };
+                nguong = Some(v);
+            }
             "-h" | "--help" => {
-                println!("vsc <sach.epub> [-o <ra.epub>] [-m <mo-hinh.gguf>] [--kho] [-v]");
+                println!(
+                    "vsc <sach.epub> [-o <ra.epub>] [-m <mo-hinh.gguf>] [--kho] [-v] \
+                     [--cho-trong] [-n <ngưỡng>]"
+                );
                 return Ok(());
             }
             _ => vao = Some(PathBuf::from(a)),
@@ -72,6 +90,24 @@ fn chay() -> Result<()> {
         ra.clone()
     };
 
+    let mut tuy_chon = CaiDat::default().thanh_tuy_chon();
+    if cho_trong {
+        tuy_chon.kieu_cham = chinhta::soat::KieuCham::ChoTrong;
+        // Ngưỡng đi kèm lối chấm. Đổi lối mà giữ ngưỡng của lối kia thì van an
+        // toàn lệch thang đo chừng 1,3 lần — xem `TuyChon::nguong_mo_hinh`.
+        tuy_chon.nguong_mo_hinh = 0.018;
+    }
+    if let Some(n) = nguong {
+        tuy_chon.nguong_mo_hinh = n;
+    }
+    if mh.is_some() {
+        eprintln!(
+            "Lối chấm: {} — ngưỡng {:.3} nats/ký tự",
+            if cho_trong { "điền chỗ trống" } else { "cả câu" },
+            tuy_chon.nguong_mo_hinh
+        );
+    }
+
     let bat_dau = std::time::Instant::now();
     // Nhật ký ra **stderr**, báo cáo ra stdout — nên `vsc ... > bao-cao.txt` lấy
     // đúng báo cáo mà vẫn nhìn được tiến độ trên màn hình.
@@ -89,7 +125,7 @@ fn chay() -> Result<()> {
     let kq = xu_ly::xu_ly(
         &vao,
         &dich,
-        CaiDat::default().thanh_tuy_chon(),
+        tuy_chon,
         mh.as_ref().map(|m| m as &dyn chinhta::soat::ChamDiem),
         &mut bao,
     )?;

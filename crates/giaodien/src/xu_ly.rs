@@ -85,6 +85,8 @@ pub fn xu_ly(
     let mot_phan = (chi_so.len() / 20).max(1);
     let mut dem = DemKieu::default();
     let mut dem_ten = std::collections::HashMap::new();
+    let mut dem_cum = chinhta::soat::DemCum::default();
+    let mut dem_tu = std::collections::HashMap::new();
     let mut so_doan_doc = 0usize;
     for (k, &i) in chi_so.iter().enumerate() {
         if k % mot_phan == 0 {
@@ -109,6 +111,8 @@ pub fn xu_ly(
             // Gom tên riêng ngay trong lượt đọc này. Đi thêm một lượt nữa chỉ
             // để đếm tên thì tốn gấp đôi thời gian đọc cả bộ truyện.
             chinhta::soat::gom_ten_rieng(&chu, &mut dem_ten);
+            chinhta::soat::gom_cum_ten_rieng(&chu, &mut dem_cum);
+            chinhta::soat::gom_tu_dung(&chu, &mut dem_tu);
         }
     }
     kq.dem_kieu = dem;
@@ -143,7 +147,16 @@ pub fn xu_ly(
             v.iter().take(15).map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
         ));
     }
-    let bo = BoSoat::moi(tuy_chon, kq.kieu_dau).voi_ten_rieng(ten_rieng);
+    let cum = chinhta::soat::chot_cum_ten_rieng(dem_cum);
+    if !cum.is_empty() {
+        bao.chi_tiet(format!("{} cụm tên riêng đếm được từ chính cuốn sách", cum.len()));
+    }
+    let tu_dung = chinhta::soat::chot_tu_dung(dem_tu);
+    bao.chi_tiet(format!("{} tiếng khác nhau cuốn sách thật sự dùng", tu_dung.len()));
+    let bo = BoSoat::moi(tuy_chon, kq.kieu_dau)
+        .voi_ten_rieng(ten_rieng)
+        .voi_cum_ten_rieng(cum)
+        .voi_tu_dung(tu_dung);
     let mut da_sua_file: Vec<usize> = Vec::new();
 
     for (k, &i) in chi_so.iter().enumerate() {
@@ -156,17 +169,38 @@ pub fn xu_ly(
         let doan = quet::quet(&noi_dung);
         let mut va: Vec<(std::ops::Range<usize>, String)> = Vec::new();
 
-        for d in &doan {
+        for (j, d) in doan.iter().enumerate() {
             kq.so_doan += 1;
             kq.so_chu += d.chu.chars().count();
 
             let mut r = bo.soat(&d.chu);
             match mo_hinh {
                 Some(mh) => {
+                    // Ngữ cảnh cho lối điền chỗ trống: hai đoạn kề bên. Dựng lại
+                    // NFC như chính đoạn đang soát — đưa chữ gõ rời vào làm ngữ
+                    // cảnh thì mô hình đọc một chuỗi khác hẳn chuỗi nó quen, và
+                    // ngữ cảnh lẽ ra để giúp lại thành ra thêm nhiễu.
+                    //
+                    // Chỉ dựng khi có chỗ phải hỏi mô hình: cả cuốn sách chỉ vài
+                    // trăm chỗ như thế, còn số đoạn thì hàng chục nghìn.
+                    let ke = |k: usize| {
+                        doan.get(k)
+                            .map(|x| {
+                                chinhta::chuan_hoa::dung_lai_nfc(&x.chu)
+                                    .unwrap_or_else(|| x.chu.clone())
+                            })
+                            .unwrap_or_default()
+                    };
+                    let (truoc, sau) = if r.cho_xet.is_empty() {
+                        (String::new(), String::new())
+                    } else {
+                        (j.checked_sub(1).map(&ke).unwrap_or_default(), ke(j + 1))
+                    };
                     // Gom rồi báo một lượt: `bao` đang được mượn `&mut` nên
                     // không lồng thêm một lượt mượn nữa vào trong lời gọi này.
                     let mut dong = Vec::new();
-                    bo.quyet_bang_mo_hinh(&mut r, mh, &mut |doi, chu| dong.push((doi, chu)));
+                    let nc = chinhta::soat::NguCanh { truoc: &truoc, sau: &sau };
+                    bo.quyet_bang_mo_hinh(&mut r, mh, &nc, &mut |doi, chu| dong.push((doi, chu)));
                     for (doi, chu) in dong {
                         bao.chi_tiet(format!("{} {chu}", if doi { "sửa:" } else { "bỏ: " }));
                     }

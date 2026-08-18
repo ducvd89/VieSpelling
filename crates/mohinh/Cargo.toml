@@ -13,6 +13,11 @@ chinhta = { path = "../chinhta" }
 # được với đúng bộ cmake + LIBCLANG_PATH sẵn có.
 llama-cpp-2 = "0.1.154"
 
+# Chỉ để `examples/so_loi_cham.rs` đọc được ca bẫy ra từ sách thật thay vì cắm
+# sẵn văn của người khác vào mã nguồn. Tầng chấm điểm **không** biết gì về EPUB.
+[dev-dependencies]
+sach = { path = "../sach" }
+
 [features]
 # CUDA **bật mặc định**. Việc ở đây là hàng nghìn lượt chấm câu cho một cuốn
 # sách, và đó đúng là loại việc mà card đồ hoạ ăn đứt CPU.

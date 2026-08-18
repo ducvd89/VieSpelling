@@ -1692,6 +1692,7 @@ dependencies = [
  "anyhow",
  "chinhta",
  "llama-cpp-2",
+ "sach",
 ]
 
 [[package]]

@@ -1,0 +1,117 @@
+# Typo hay gặp trong ebook tiếng Việt, và các cách sửa đã quan sát được.
+#
+# **Sinh ra bằng máy — đừng sửa tay.** Xem `du-lieu/NGUON.md` và
+# `crates/giaodien/examples/dung_typo.rs`.
+#
+# Mỗi dòng là một typo và **mọi** đáp án đã gặp cho nó, xếp theo số lần, nhiều
+# nhất đứng trước:
+#
+#     khôgn => không
+#     măt   => mắt | mặt | mật
+#
+# Một đáp án nghĩa là **dứt khoát** — áp thẳng, không hỏi ai. Nhiều đáp án nghĩa
+# là bảng này chỉ **thu hẹp** danh sách ứng viên, rồi tầng tên riêng, tầng từ ghép
+# và mô hình chọn tiếp trong đó.
+#
+# Giữ cả mục nhiều đáp án là chỗ quan trọng nhất của file này. `măt` gặp 20 lần
+# trong hai bộ truyện: 12 lần đúng là `mắt`, 7 lần là `mặt`, 1 lần là `mật`. Bảng
+# nào chỉ giữ đáp án đông nhất sẽ sai 8 trong 20 chỗ ấy, và sai một cách im lặng.
+#
+# Ngưỡng: gặp từ 3 lần trở lên trên corpus dựng bảng.
+khôgn => không
+ớc => ước | ác
+môt => một | môn | mộc
+măt => mắt | mặt | mật
+nguời => người | ngươi
+ngưoi => ngươi | người
+đso => đó | sơ
+đươc => được
+đuợc => được
+nhưgn => nhưng | những
+săc => sắc
+tôc => tộc | tốc
+thôgn => thông
+biêt => biết
+hăc => hắc
+khuyếch => khuếch
+lứon => lớn
+cuời => cười
+duới => dưới
+truợng => trượng | trưởng
+trươc => trước
+viêc => việc | viên
+đưòng => đường
+đựoc => được
+chơt => chợt | chờ
+nghạnh => ngạnh
+ngưòi => người
+tiéng => tiếng
+vịđạo => vị đạo
+bât => bất
+băt => bắt
+mắ => mắt
+mặ => mặc | mặt | mà
+trưóc => trước
+trướ => trước
+vât => vật
+đă => đã
+chỉếm => chiếm
+côgn => công
+diêt => diệt
+găp => gặp
+hoăc => hoặc | hoắc
+hoặch => hoạch
+kó => có
+kông => không
+lièn => liền
+măc => mặc
+ngoời => người | ngươi
+nưuã => nữa
+thuôc => thuộc
+thuờng => thường
+thậ => thật | thả | thận
+tiêp => tiếp | tiên | tiêu
+xuât => xuất
+đôt => đột
+biế => biết
+chăc => chắc
+dứoi => dưới
+giảđại => giả đại
+hêt => hết
+hũu => hữu
+hơp => hợp | hơi
+khẳ => khả
+lênn => lên
+lưc => lực
+muời => mười
+mât => mất | mật
+măy => may
+mưoi => mươi
+mẩt => mất
+nguơi => ngươi
+ngênh => nghênh
+nhiiều => nhiều
+nhâ => nhan | nhi | nhân
+nhãnchi => nhãn chi
+nhéch => nhếch
+nhúch => nhúc
+nhắ => nhắc | nhăm
+noiư => nơi
+noó => nói | nó
+nẵ => gã | nã | đã
+phôc => phốc
+quyêt => quyết
+rôt => rốt
+rútt => rút
+thưc => thực | thức
+thượgn => thượng
+tiép => tiếp
+tnều => tiêu
+truớc => trước
+tâp => tâm | tập
+tât => tất
+uớc => ước
+xuốgn => xuống
+àny => này
+đep => đẹp
+đât => đất | đây
