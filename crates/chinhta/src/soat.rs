@@ -414,6 +414,20 @@ impl BoSoat {
                 .chars()
                 .filter(|&c| am_tiet::bo_thanh(c).1 != am_tiet::NGANG)
                 .count();
+            // Cụm `uơ` có phụ âm cuối là typo **suy ra được**, không cần tra bảng
+            // — xem [`co_cum_uo_kin`]. Nó đi cùng đường với bảng typo: một đáp án
+            // thì áp thẳng, mà ở đây luôn đúng một vì dấu thanh được giữ nguyên.
+            let uo;
+            let typo: Option<&[String]> = match self.bang_typo.tra(t.chu) {
+                Some(d) => Some(d),
+                None => match sua_cum_uo(t.chu) {
+                    Some(m) => {
+                        uo = [m];
+                        Some(&uo[..])
+                    }
+                    None => None,
+                },
+            };
             let (ung_vien, bang_chung) = xep_hang_ung_vien(
                 t.chu,
                 uv_tho,
@@ -423,7 +437,7 @@ impl BoSoat {
                 sau,
                 &self.cum_ten_rieng,
                 &self.tu_dung,
-                self.bang_typo.tra(t.chu),
+                typo,
             );
             if ung_vien.is_empty() {
                 continue;
@@ -633,6 +647,70 @@ impl BoSoat {
         kq.chu = moi;
         kq.cho_xet = con_lai;
     }
+}
+
+/// Sửa cụm `uơ` có phụ âm cuối thành `ươ`: `thuơng` → `thương`, `duợc` → `dược`.
+///
+/// **Giữ nguyên dấu thanh**, và đó là chỗ làm phép sửa này thành *một* đáp án chứ
+/// không phải mấy. `cuờng` cho ra `cường` chứ không phải `cưỡng`: dấu huyền là thứ
+/// người viết đã cố ý gõ, và cả repo này xếp "giữ thanh gốc" lên trước từ đầu —
+/// người ta hiếm khi gõ nhầm dấu thanh mà đúng mọi thứ khác. Chỉ dấu **móc** là
+/// chỗ gõ trượt, và nó chuyển từ `o` sang `u`.
+///
+/// Kiểu viết hoa cũng giữ: `Duơng` → `Dương`, `Tuợng` → `Tượng`.
+fn sua_cum_uo(chu: &str) -> Option<String> {
+    if !co_cum_uo_kin(chu) {
+        return None;
+    }
+    let ky_tu: Vec<char> = chu.chars().collect();
+    let mut ra = ky_tu.clone();
+    let mut co_doi = false;
+    for i in 0..ky_tu.len().saturating_sub(1) {
+        let (a, thanh) = am_tiet::bo_thanh(ky_tu[i]);
+        let (b, _) = am_tiet::bo_thanh(ky_tu[i + 1]);
+        if a.to_lowercase().next() != Some('u') || b.to_lowercase().next() != Some('ơ') {
+            continue;
+        }
+        if i > 0 && ky_tu[i - 1].to_lowercase().next() == Some('q') {
+            continue;
+        }
+        // Chỉ chữ `u` thành `ư`. Dấu thanh trên chính nó (nếu có) và kiểu viết hoa
+        // đều giữ nguyên.
+        let moi = am_tiet::gan_thanh('ư', thanh);
+        ra[i] = if ky_tu[i].is_uppercase() {
+            moi.to_uppercase().next().unwrap_or(moi)
+        } else {
+            moi
+        };
+        co_doi = true;
+    }
+    co_doi.then(|| ra.into_iter().collect())
+}
+
+/// Chữ này có mang cụm `uơ` **và có phụ âm cuối** không — tức chắc chắn là typo.
+///
+/// Tiếng Việt viết `ươ`. Bảng 9.550 âm tiết có 14 chữ mang cụm `uơ`, nhưng chúng
+/// chia làm hai nhóm và **không nhóm nào phản bác luật này**:
+///
+/// - Nhóm `qu-` (`quơ`, `quở`, `quờn`, `quớt`, `quới`…): ở đó `u` thuộc âm đầu
+///   `qu`, không phải cụm nguyên âm. Bắt bằng chính chữ `q` đứng trước.
+/// - Sáu chữ còn lại (`huơ`, `khuơ`, `khuờ`, `nguơ`, `thuở`, `uở`) đều là **vần
+///   mở** — không chữ nào có phụ âm cuối.
+///
+/// Nên "có phụ âm cuối" là cái van tách được hai bên, và tách sạch. Thiếu nó thì
+/// luật quét cả `thuở` — mà `muôn thuở`, `thuở nhỏ` đầy trong sách, còn `thưở` lại
+/// đúng là lỗi rất nhiều người viết. Quét bừa thì bộ sửa **tạo ra** đúng lỗi ấy.
+fn co_cum_uo_kin(chu: &str) -> bool {
+    /// Phụ âm cuối của tiếng Việt. `i`, `o`, `u`, `y` là bán nguyên âm, không tính.
+    const CUOI: [char; 6] = ['c', 'm', 'n', 'p', 't', 'h'];
+
+    let khung = am_tiet::bo_thanh_chuoi(&chu.to_lowercase());
+    let ky_tu: Vec<char> = khung.chars().collect();
+    ky_tu.windows(2).enumerate().any(|(i, w)| {
+        w == ['u', 'ơ']
+            && ky_tu.get(i.wrapping_sub(1)) != Some(&'q')
+            && ky_tu.get(i + 2).is_some_and(|c| CUOI.contains(c))
+    })
 }
 
 /// Cửa sổ văn bản dùng để chấm một chỗ sửa, theo lối đang chọn.
@@ -948,8 +1026,25 @@ fn xep_hang_ung_vien(
             usize::from(typo.is_some_and(|d| d.iter().any(|x| *x == thap)))
         })
         .collect();
-    let ten: Vec<usize> =
-        uv.iter().map(|u| khop_cum(cum_ten_rieng, truoc, &u.chu, sau)).collect();
+    // **Chỉ tra bảng tên riêng cho chữ viết hoa.** Bảng dựng từ những cặp *viết
+    // hoa* — đó là toàn bộ tín hiệu của nó — nên đem tra cho chữ thường là dùng
+    // một bằng chứng ở chỗ nó không còn giá trị.
+    //
+    // Đo được: `Mệnh Bài` viết hoa giữa câu 14 lần nên vào bảng, `Lệnh Bài` chỉ 1
+    // lần nên trượt ngưỡng. Nhưng trong cả sách `lệnh bài` gặp **463** lần còn
+    // `mệnh bài` chỉ 42 — mẫu chữ hoa ngược hẳn thực tế. Thế là `phía trên lẹnh
+    // bài` ra `mệnh bài`, dù `lệnh` vừa giữ phụ âm đầu vừa rẻ hơn bốn lần.
+    let hoa_dau = goc.chars().next().is_some_and(|c| c.is_uppercase());
+    let ten: Vec<usize> = uv
+        .iter()
+        .map(|u| {
+            if hoa_dau {
+                khop_cum(cum_ten_rieng, truoc, &u.chu, sau)
+            } else {
+                0
+            }
+        })
+        .collect();
     let giu: Vec<usize> = uv.iter().map(|u| usize::from(giu_phu_am_dau(goc, &u.chu))).collect();
     let khop: Vec<usize> =
         uv.iter().map(|u| tu_dien::khop_hang_xom(truoc, &u.chu, sau)).collect();
@@ -1709,10 +1804,41 @@ mod kiem {
         // `tình thương` có trong từ điển, `tình thường`/`tình thưởng` thì không.
         // Bằng chứng ấy dứt khoát nên phải áp được **kể cả khi mô hình phản
         // đối** — mô hình chấm đều nhau ở đây, tức là nó không có ý kiến gì.
+        //
+        // `thuơng` giờ còn dứt khoát sớm hơn thế: cụm `uơ` có phụ âm cuối là typo
+        // suy ra được, nên nó chốt ngay ở hạng typo mà chưa cần tới từ ghép. Ca từ
+        // ghép thuần thì lấy `chúg ta` — `chúng ta` có trong từ điển, `chừ ta` thì
+        // không, và `chúg` chẳng dính luật typo nào.
         let mut kq = bo().soat("Tình thuơng của mẹ");
-        assert_eq!(kq.cho_xet[0].bang_chung, BangChung::TuGhep);
+        assert_eq!(kq.cho_xet[0].bang_chung, BangChung::Typo);
+        let kq2 = bo().soat("Chúg ta đi");
+        assert_eq!(kq2.cho_xet[0].bang_chung, BangChung::TuGhep, "{:?}", kq2.cho_xet);
         bo().quyet_bang_mo_hinh(&mut kq, &Deu, &NguCanh::default(), &mut |_, _| {});
         assert_eq!(kq.chu, "Tình thương của mẹ");
+    }
+
+
+    #[test]
+    fn chu_thuong_thi_khong_tra_bang_ten_rieng() {
+        // `Mệnh Bài` là tên một vật trong truyện nên nó vào bảng tên riêng. Nhưng
+        // `phía trên lẹnh bài linh quang` viết **thường**, tức đó là danh từ chung
+        // `lệnh bài` — và trong cả cuốn sách `lệnh bài` gặp 463 lần còn `mệnh bài`
+        // chỉ 42.
+        //
+        // Bảng tên riêng dựng từ chữ **viết hoa**; đem tra cho chữ thường là dùng
+        // bằng chứng ở chỗ nó không còn giá trị, và ra `mệnh` — dù `lệnh` vừa giữ
+        // phụ âm đầu vừa rẻ hơn bốn lần.
+        let mut dem = DemCum::default();
+        for _ in 0..LAN_DE_LA_TEN_RIENG {
+            gom_cum_ten_rieng("Hắn đưa Mệnh Bài cho ta.", &mut dem);
+        }
+        let cum = chot_cum_ten_rieng(dem);
+        assert!(cum.contains("mệnh bài"), "{cum:?}");
+
+        let bo = BoSoat::moi(TuyChon::default(), Kieu::Cu).voi_cum_ten_rieng(cum);
+        let mut kq = bo.soat("Nhất thời phía trên lẹnh bài linh quang chợt lóe.");
+        bo.quyet_bang_mo_hinh(&mut kq, &Deu, &NguCanh::default(), &mut |_, _| {});
+        assert!(kq.chu.contains("lệnh bài"), "{}", kq.chu);
     }
 
     #[test]

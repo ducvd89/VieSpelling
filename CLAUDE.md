@@ -140,8 +140,24 @@ Rồi bằng chứng nào đủ mạnh thì áp thẳng, không hỏi mô hình:
 đúng một đáp án), `CumTenRieng`, `TuGhep`, hoặc `DauPhu` (chỉ thêm đúng một dấu
 phụ, và chữ ấy có trong vốn từ của cuốn sách). Còn lại mới tới **mô hình ngôn ngữ**.
 
-Đo trên Phàm Nhân Tu Tiên, ai quyết bao nhiêu chỗ: typo 461, từ ghép 484, tách chữ
-dính 175, tên riêng 97, dấu phụ 65, mô hình 332.
+Đo trên Phàm Nhân Tu Tiên, ai quyết bao nhiêu chỗ: typo 484, từ ghép 491, tách chữ
+dính 175, dấu phụ 63, tên riêng 35, mô hình 365.
+
+**Cụm `uơ` có phụ âm cuối đi chung hạng với bảng typo**, vì nó cũng là quan sát
+trực tiếp — chỉ khác chỗ suy ra được thay vì phải tra bảng. Tiếng Việt viết `ươ`,
+và bảng 9.550 âm tiết không có một chữ nào phản bác: sáu chữ mang cụm `uơ` thật
+(`huơ`, `khuơ`, `khuờ`, `nguơ`, `thuở`, `uở`) đều là **vần mở**, còn ba chữ có phụ
+âm cuối (`quờn`, `quởn`, `quớt`) đều thuộc nhóm `qu-`, nơi `u` là âm đầu chứ không
+phải cụm nguyên âm.
+
+**Dấu thanh giữ nguyên**, và chính điều ấy làm phép sửa này chỉ có *một* đáp án:
+`cuờng` ra `cường` chứ không phải `cưỡng`. Đo trên sách thì cả hai chỗ đổi đều sửa
+được lỗi — `thần thông cưỡng đại` thành `cường đại`, `vườn một ngón tay` thành
+`vươn một ngón tay`.
+
+Thiếu vế "có phụ âm cuối" thì luật quét cả `thuở`, mà `muôn thuở`, `thuở nhỏ` đầy
+trong sách còn `thưở` lại đúng là lỗi rất nhiều người viết — bộ sửa sẽ **tạo ra**
+đúng lỗi ấy ở những chỗ tác giả viết đúng.
 
 **Bảng typo đứng trên hết vì nó là quan sát trực tiếp.** `khôgn` gặp 153 lần trong
 một bộ truyện và lần nào cũng là `không`. Mọi tầng dưới đều đang **suy** — suy từ
@@ -193,6 +209,14 @@ Hai cái van của bảng tên riêng, vì nó đứng trên gần hết mọi t
 **Bỏ tiếng mở đầu câu.** Đầu câu thì chữ nào cũng viết hoa nên chữ hoa ở đó chẳng
 nói gì; không có luật này thì `Nhưng Hàn Lập` thành một cụm tên riêng lặp hàng trăm
 lần.
+
+**Chỉ tra bảng cho chữ viết hoa.** Bảng dựng từ cặp *viết hoa* — đó là toàn bộ tín
+hiệu của nó — nên đem tra cho chữ thường là dùng bằng chứng ở chỗ nó không còn giá
+trị. Đo được: `Mệnh Bài` viết hoa 14 lần nên vào bảng, `Lệnh Bài` chỉ 1 lần nên
+trượt ngưỡng; nhưng tính cả chữ thường thì `lệnh bài` gặp **463** lần còn `mệnh
+bài` chỉ 42. Thế là `phía trên lẹnh bài` ra `mệnh bài`, dù `lệnh` vừa giữ phụ âm
+đầu vừa rẻ hơn bốn lần. Thêm van này thì số chỗ bảng tên riêng quyết đi từ 97 xuống
+35 — hai phần ba số ấy là chữ thường, nơi nó không nên có tiếng nói.
 
 **Bảng đếm phải hai tầng.** Bộ truyện 25 triệu chữ có chừng sáu triệu cặp tiếng
 liền nhau, phần lớn xuất hiện đúng một lần. Giữ nguyên chữ cho tất cả thì bảng ngốn
@@ -394,8 +418,8 @@ Harry Potter tập 4 (1,2 triệu chữ, 9.577 đoạn):
 | Chỗ ngờ để lại | 86 | 0 |
 | Thời gian | 4,4 giây | 52 giây |
 
-Phàm Nhân Tu Tiên (25,6 triệu chữ, 162.772 đoạn, 2.467 file): 2.377 lỗi chữ nghĩa,
-0 chỗ ngờ, 457 giây.
+Phàm Nhân Tu Tiên (25,6 triệu chữ, 162.772 đoạn, 2.467 file): 2.376 lỗi chữ nghĩa,
+0 chỗ ngờ, 449 giây.
 
 Con số đáng nhìn không phải số lỗi mà là **ai quyết**: trên Phàm Nhân Tu Tiên, các
 tầng luật quyết 1.282 chỗ và mô hình chỉ quyết 332. Tầng luật càng khoẻ thì mô hình
