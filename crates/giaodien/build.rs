@@ -24,6 +24,7 @@ const CAN_CHEP: [&str; 3] = ["cublas64_", "cublasLt64_", "cudart64_"];
 
 fn main() {
     println!("cargo:rerun-if-env-changed=CUDA_PATH");
+    nap_tre_cublas();
     // Không dựng CUDA thì chẳng có gì để chép.
     if std::env::var_os("CARGO_FEATURE_CUDA").is_none() && !co_cuda() {
         return;
@@ -80,6 +81,35 @@ fn tim_theo_tien_to(thu_muc: &Path, tien_to: &str) -> Option<PathBuf> {
 
 /// Thư mục chứa file thực thể, suy từ `OUT_DIR`.
 ///
+/// Bảo trình liên kết **nạp trễ** cuBLAS.
+///
+/// Không có nó thì Windows nạp `cublas64_*.dll` ngay lúc mở file exe, trước khi
+/// chạy dòng lệnh đầu tiên của `main` — máy chưa cài CUDA là hộp thoại đỏ "The
+/// code execution cannot proceed", và ứng dụng không có chỗ nào để nói gì tử tế
+/// hơn. Chính vì thế bản trước phải đóng gói kèm 493 MB DLL của NVIDIA.
+///
+/// Nạp trễ thì DLL chỉ được tìm khi có ai gọi hàm đầu tiên trong đó. Ứng dụng mở
+/// được trên mọi máy, tự kiểm xem đủ DLL chưa, và mời người dùng tải về nếu thiếu.
+/// Đổi lại **phải giữ đúng một luật**: đừng gọi bất cứ thứ gì trong `mohinh` khi
+/// chưa chắc DLL có đủ — gọi lúc thiếu là tiến trình chết ngay, không bắt được.
+/// Xem `mohinh::du_dll`.
+///
+/// Chỉ cần nạp trễ mỗi cuBLAS: nó là DLL **duy nhất** file exe nhập trực tiếp,
+/// còn `cublasLt64_*` và `cudart64_*` thì chính nó kéo theo.
+fn nap_tre_cublas() {
+    if !std::env::var("CARGO_CFG_TARGET_ENV").is_ok_and(|x| x == "msvc") {
+        return;
+    }
+    for ten in ["cublas64_13.dll", "cublas64_12.dll"] {
+        println!("cargo:rustc-link-arg-bins=/DELAYLOAD:{ten}");
+    }
+    // Trình liên kết cần đoạn mã đệm của chính nó để hoãn việc nạp lại.
+    println!("cargo:rustc-link-arg-bins=delayimp.lib");
+    // DLL nào không có trong bảng nhập thì `/DELAYLOAD` chỉ là cảnh báo LNK4199 —
+    // ta khai cả hai phiên bản CUDA nên luôn thừa một cái.
+    println!("cargo:rustc-link-arg-bins=/ignore:4199");
+}
+
 /// Cargo không cho build script biết thẳng chỗ ấy. `OUT_DIR` có dạng
 /// `target/<profile>/build/<crate>-<hash>/out`, nên lùi bốn cấp là ra
 /// `target/<profile>` — chỗ exe nằm.

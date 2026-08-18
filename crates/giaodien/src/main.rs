@@ -19,7 +19,7 @@ use eframe::egui;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use ungdung::nhat_ky::{Bao, Dong, Muc, Tin};
-use ungdung::{bao_cao, cai_dat::CaiDat, xu_ly};
+use ungdung::{bao_cao, cai_dat::CaiDat, tai_cuda, xu_ly};
 
 fn main() -> eframe::Result<()> {
     let tuy_chon = eframe::NativeOptions {
@@ -73,6 +73,23 @@ fn dat_phong_chu(ctx: &egui::Context) {
     ctx.set_fonts(phong);
 }
 
+/// Ghép tốc độ tải và thời gian còn lại thành một dòng đọc được.
+fn toc_do_va_con_lai(toc_do: f64, con_lai: Option<f64>) -> String {
+    if toc_do < 1.0 {
+        return "đang chờ…".into();
+    }
+    let toc = if toc_do >= 1048576.0 {
+        format!("{:.1} MB/s", toc_do / 1048576.0)
+    } else {
+        format!("{:.0} KB/s", toc_do / 1024.0)
+    };
+    match con_lai {
+        Some(g) if g >= 90.0 => format!("{toc}, còn khoảng {:.0} phút", g / 60.0),
+        Some(g) => format!("{toc}, còn khoảng {g:.0} giây"),
+        None => toc,
+    }
+}
+
 /// Tin từ luồng nền. Bọc thêm hai trạng thái kết thúc quanh [`Tin`] của lõi.
 enum TinUi {
     Tien(Tin),
@@ -110,6 +127,10 @@ struct UngDung {
     loi: Option<String>,
     hien_cai_dat: bool,
     mo_hinh_co_san: Vec<PathBuf>,
+    /// Tiến độ tải DLL CUDA, khi người dùng đã bấm tải. `None` là chưa bấm.
+    tai_cuda: Option<std::sync::Arc<std::sync::Mutex<tai_cuda::TienDo>>>,
+    /// Đã bấm "để sau" trong lượt chạy này thì thôi hỏi lại.
+    bo_qua_cuda: bool,
 }
 
 impl UngDung {
@@ -132,6 +153,115 @@ impl UngDung {
             file_bao_cao: None,
             loi: None,
             hien_cai_dat: false,
+            tai_cuda: None,
+            bo_qua_cuda: false,
+        }
+    }
+
+    /// Có nên hỏi người dùng tải DLL CUDA không.
+    ///
+    /// Chỉ hỏi khi **thật sự cần**: người dùng đã chọn một mô hình mà máy lại
+    /// thiếu DLL. Không có mô hình thì bộ dò vẫn chạy đủ mọi tầng luật, và hỏi
+    /// lúc ấy chỉ là dựng một rào chắn trước mặt người chỉ muốn sửa dấu câu.
+    fn can_hoi_cuda(&self) -> bool {
+        !self.bo_qua_cuda
+            && self.tai_cuda.is_none()
+            && self.cai_dat.mo_hinh.is_some()
+            && !mohinh::du_dll()
+    }
+
+    /// Hộp thoại mời tải DLL runtime của CUDA.
+    fn hop_thoai_cuda(&mut self, ctx: &egui::Context) {
+        let mut mo = true;
+        egui::Window::new("Cần thêm phần chạy mô hình")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .open(&mut mo)
+            .show(ctx, |ui| {
+                ui.set_width(430.0);
+                let dang_tai = self.tai_cuda.is_some();
+                if !dang_tai {
+                    ui.label(
+                        "Mô hình ngôn ngữ chạy trên card NVIDIA, và nó cần ba thư viện \
+                         runtime của CUDA. Bản cài không kèm sẵn vì chúng nặng 493 MB, \
+                         mà phần lớn người dùng không cần tới.",
+                    );
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(
+                            "Tải khoảng 375 MB từ NVIDIA. Không tải cũng dùng được — \
+                             bộ dò vẫn chạy đủ mọi tầng luật, chỉ để lại nhiều chỗ \
+                             ngờ hơn.",
+                        )
+                        .weak(),
+                    );
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Tải về").clicked() {
+                            if let Ok(exe) = std::env::current_exe() {
+                                if let Some(d) = exe.parent() {
+                                    self.tai_cuda = Some(tai_cuda::bat_dau(d.to_path_buf()));
+                                }
+                            }
+                        }
+                        if ui.button("Để sau").clicked() {
+                            self.bo_qua_cuda = true;
+                        }
+                    });
+                    return;
+                }
+
+                let td = self.tai_cuda.as_ref().unwrap();
+                let (ty_le, da, tong, toc, mo_ta, xong, loi, con) = {
+                    let t = td.lock().unwrap();
+                    (
+                        t.ty_le(),
+                        t.da_tai,
+                        t.tong,
+                        t.toc_do,
+                        t.mo_ta.clone(),
+                        t.xong,
+                        t.loi.clone(),
+                        t.con_lai(),
+                    )
+                };
+                ui.label(&mo_ta);
+                ui.add_space(4.0);
+                ui.add(egui::ProgressBar::new(ty_le).show_percentage());
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{:.0} / {:.0} MB   —   {}",
+                        da as f64 / 1048576.0,
+                        tong as f64 / 1048576.0,
+                        toc_do_va_con_lai(toc, con)
+                    ))
+                    .weak(),
+                );
+                ui.add_space(10.0);
+                if let Some(e) = &loi {
+                    ui.colored_label(egui::Color32::from_rgb(200, 60, 60), e);
+                    if ui.button("Đóng").clicked() {
+                        self.tai_cuda = None;
+                        self.bo_qua_cuda = true;
+                    }
+                } else if xong {
+                    ui.label("Xong. Mô hình đã dùng được.");
+                    if ui.button("Đóng").clicked() {
+                        self.tai_cuda = None;
+                    }
+                } else {
+                    if ui.button("Huỷ").clicked() {
+                        td.lock().unwrap().huy = true;
+                    }
+                    // Đang tải thì vẽ lại đều đặn, không thì thanh tiến độ đứng
+                    // im cho tới khi người dùng động vào chuột.
+                    ctx.request_repaint_after(std::time::Duration::from_millis(200));
+                }
+            });
+        if !mo {
+            self.bo_qua_cuda = true;
         }
     }
 
@@ -302,6 +432,9 @@ impl eframe::App for UngDung {
     fn update(&mut self, ctx: &egui::Context, _khung: &mut eframe::Frame) {
         self.doc_tin(ctx);
         self.nhan_tha_file(ctx);
+        if self.can_hoi_cuda() || self.tai_cuda.is_some() {
+            self.hop_thoai_cuda(ctx);
+        }
 
         egui::TopBottomPanel::top("tren").show(ctx, |ui| {
             ui.add_space(8.0);

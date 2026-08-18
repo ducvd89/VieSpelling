@@ -7,4 +7,5 @@
 pub mod bao_cao;
 pub mod cai_dat;
 pub mod nhat_ky;
+pub mod tai_cuda;
 pub mod xu_ly;

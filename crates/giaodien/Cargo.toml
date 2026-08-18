@@ -32,6 +32,10 @@ mohinh = { path = "../mohinh" }
 eframe = { version = "0.32", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 egui = "0.32"
 rfd = "0.15"
+# Tải DLL CUDA từ NVIDIA — xem `tai_cuda.rs`. Bản không rườm rà, chặn luồng, và
+# dùng rustls nên không kéo theo OpenSSL.
+ureq = "2"
+zip.workspace = true
 unicode-normalization.workspace = true
 
 [dev-dependencies]

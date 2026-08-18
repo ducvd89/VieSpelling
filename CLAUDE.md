@@ -395,6 +395,24 @@ thì mọi thanh đều bị tính là khác thanh gốc và `đnag` cho ra `đa
 diện** và kiểm phông có glyph — đã bắt được `▸` hiện ra ô vuông trống. Đừng dùng
 ký hiệu ngoài Latin-1 trong chuỗi giao diện.
 
+**Đừng gọi bất cứ thứ gì trong `mohinh` khi chưa kiểm `mohinh::du_dll()`.** Bản
+dựng Windows cho `cublas64_*.dll` **nạp trễ** (`giaodien/build.rs`), nên ứng dụng
+mở được trên máy chưa cài CUDA và tự mời tải về — xem `giaodien/tai_cuda.rs`. Cái
+giá là hàm llama.cpp đầu tiên được gọi lúc thiếu DLL sẽ **giết tiến trình ngay tại
+chỗ**: không panic, không lỗi, không dòng nhật ký nào. `card_dung_duoc`,
+`liet_ke_thiet_bi` và `MoHinh::nap` đều đã tự chặn; thêm hàm công khai nào nữa thì
+chặn y hệt.
+
+Vì sao phải nạp trễ thay vì đóng gói kèm: ba DLL ấy nặng **493 MB** —
+`cublasLt64_13.dll` một mình 442 MB — nên bản cài sẽ gần 600 MB cho một thứ mà
+người không có card NVIDIA chẳng dùng tới. Nạp trễ rồi thì bản cài còn 43 MB, và
+người cần mô hình tải thêm 375 MB từ kho `redist` của NVIDIA.
+
+**Bản cài đặt vào thư mục người dùng, không vào Program Files.** `dong-goi/*.iss`
+đặt `PrivilegesRequired=lowest` và `{localappdata}\Programs`, vì bộ tải ghi DLL
+xuống **cạnh chính file exe** — vào Program Files thì tiến trình không có quyền
+quản trị không ghi nổi, và tính năng tải tự hỏng.
+
 **Sửa `du-lieu/*.txt` bằng tay là sai.** `am-tiet.txt` và `tu-ghep.txt` sinh ra
 từ `crates/chinhta/examples/dung_tu_dien.rs`; sửa tay thì lần dựng lại sau mất
 hết. Xem `du-lieu/NGUON.md`.

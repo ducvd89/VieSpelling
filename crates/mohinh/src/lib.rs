@@ -105,11 +105,46 @@ const SO_LOP_GPU: u32 = 999;
 /// cách âm thầm. Thà báo lỗi.
 const VRAM_TOI_THIEU: usize = 4 * 1024 * 1024 * 1024;
 
+/// Tiền tố tên ba DLL runtime của CUDA mà bản dựng này cần.
+const DLL_CAN: [&str; 3] = ["cublas64_", "cublasLt64_", "cudart64_"];
+
+/// Thư mục chứa file thực thi đang chạy.
+fn thu_muc_exe() -> Option<std::path::PathBuf> {
+    Some(std::env::current_exe().ok()?.parent()?.to_path_buf())
+}
+
+/// Đã có đủ DLL runtime của CUDA cạnh file thực thi chưa.
+///
+/// **Phải gọi trước mọi thứ khác trong crate này.** Bản dựng Windows cho cuBLAS
+/// *nạp trễ* (xem `giaodien/build.rs`), nên ứng dụng mở được trên máy chưa cài
+/// CUDA — nhưng đổi lại, hàm llama.cpp đầu tiên được gọi lúc thiếu DLL sẽ giết
+/// tiến trình ngay tại chỗ, không có lỗi nào bắt được. Cái van duy nhất là đừng
+/// gọi.
+///
+/// Chỉ tìm cạnh exe chứ không tra PATH, và đó là chủ ý: CUDA 13 dời DLL runtime
+/// sang thư mục `bin/x64` nên máy vừa cài Toolkit xong vẫn không có chúng trong
+/// PATH.
+/// Cạnh exe cũng đúng chỗ mà `giaodien::tai_cuda` tải về.
+pub fn du_dll() -> bool {
+    if !cfg!(all(windows, feature = "cuda")) {
+        return true;
+    }
+    let Some(d) = thu_muc_exe() else { return false };
+    let Ok(muc) = std::fs::read_dir(&d) else { return false };
+    let ten: Vec<String> =
+        muc.filter_map(|x| Some(x.ok()?.file_name().to_string_lossy().to_string())).collect();
+    DLL_CAN.iter().all(|t| ten.iter().any(|n| n.starts_with(t) && n.ends_with(".dll")))
+}
+
 /// Card đồ hoạ dùng được, nếu có.
 ///
 /// Chỉ nhận GPU rời (`Gpu`). GPU tích hợp bị loại: nó dùng chung RAM với hệ
 /// thống nên không nhanh hơn CPU là bao, mà lại làm ta tưởng đang chạy trên card.
 pub fn card_dung_duoc() -> Option<llama_cpp_2::LlamaBackendDevice> {
+    // Thiếu DLL mà gọi xuống llama.cpp là chết tiến trình — xem [`du_dll`].
+    if !du_dll() {
+        return None;
+    }
     llama_cpp_2::list_llama_ggml_backend_devices()
         .into_iter()
         .filter(|d| d.device_type == llama_cpp_2::LlamaBackendDeviceType::Gpu)
@@ -118,6 +153,9 @@ pub fn card_dung_duoc() -> Option<llama_cpp_2::LlamaBackendDevice> {
 
 /// Mô tả mọi thiết bị llama.cpp nhìn thấy — để in ra khi báo lỗi thiếu card.
 pub fn liet_ke_thiet_bi() -> String {
+    if !du_dll() {
+        return "(chưa có DLL runtime của CUDA)".into();
+    }
     let d = llama_cpp_2::list_llama_ggml_backend_devices();
     if d.is_empty() {
         return "(không thấy thiết bị nào)".into();
@@ -196,6 +234,12 @@ impl MoHinh {
         duong_dan: &Path,
         mut tien_do: impl FnMut(f32) + 'static,
     ) -> Result<MoHinh> {
+        // Chặn **trước** mọi lời gọi xuống llama.cpp, kể cả `nen()`.
+        if !du_dll() {
+            anyhow::bail!(
+                "chưa có DLL runtime của CUDA cạnh file thực thi. Mở lại ứng dụng để tải về, hoặc bỏ mô hình để chạy bằng luật."
+            );
+        }
         let nen = nen()?;
 
         if !cfg!(feature = "cuda") {
